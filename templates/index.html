@@ -196,7 +196,7 @@ Document Center
 
                 <td>
 
-                    {% if file.tipe == "PDF" %}
+                    {% if file.tipe == "PDF" or file.tipe == "Gambar" %}
 
                     <a
                         href="/preview/{{ file.nama }}"

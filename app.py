@@ -144,14 +144,18 @@ def preview(nama_file):
 
     ext = os.path.splitext(nama_file)[1].lower()
 
-    if ext != ".pdf":
+    if ext == ".pdf":
+        mimetype = "application/pdf"
+    elif ext in {".jpg", ".jpeg", ".png", ".gif"}:
+        mimetype = f"image/{ext.lstrip('.')}"
+    else:
         return redirect(url_for("download", nama_file=nama_file))
 
     return send_from_directory(
         app.config["UPLOAD_FOLDER"],
         nama_file,
         as_attachment=False,
-        mimetype="application/pdf"
+        mimetype=mimetype
     )
 
 
