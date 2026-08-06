@@ -23,6 +23,59 @@ DATABASE = "database/document_center.db"
 
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
+ALLOWED_EXTENSIONS = {
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx",
+    ".ppt", ".pptx", ".jpg", ".jpeg", ".png",
+    ".zip", ".rar", ".7z",
+}
+
+ICON_MAP = {
+    ".pdf": ("PDF", "bi-file-earmark-pdf text-danger"),
+    ".doc": ("Word", "bi-file-earmark-word text-primary"),
+    ".docx": ("Word", "bi-file-earmark-word text-primary"),
+    ".xls": ("Excel", "bi-file-earmark-excel text-success"),
+    ".xlsx": ("Excel", "bi-file-earmark-excel text-success"),
+    ".ppt": ("PowerPoint", "bi-file-earmark-ppt text-warning"),
+    ".pptx": ("PowerPoint", "bi-file-earmark-ppt text-warning"),
+    ".jpg": ("Gambar", "bi-file-earmark-image text-info"),
+    ".jpeg": ("Gambar", "bi-file-earmark-image text-info"),
+    ".png": ("Gambar", "bi-file-earmark-image text-info"),
+    ".zip": ("Arsip", "bi-file-earmark-zip text-secondary"),
+    ".rar": ("Arsip", "bi-file-earmark-zip text-secondary"),
+    ".7z": ("Arsip", "bi-file-earmark-zip text-secondary"),
+}
+
+
+def allowed_file(filename):
+
+    return "." in filename and os.path.splitext(filename)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def get_file_list():
+
+    files = []
+    os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+
+    for nama_file in sorted(os.listdir(app.config["UPLOAD_FOLDER"])):
+        path = os.path.join(app.config["UPLOAD_FOLDER"], nama_file)
+        if not os.path.isfile(path):
+            continue
+
+        ukuran = round(os.path.getsize(path) / 1024, 2)
+        tanggal = datetime.fromtimestamp(os.path.getmtime(path)).strftime("%d-%m-%Y %H:%M")
+        ext = os.path.splitext(nama_file)[1].lower()
+        tipe, icon = ICON_MAP.get(ext, ("File", "bi-file-earmark"))
+
+        files.append({
+            "nama": nama_file,
+            "ukuran": ukuran,
+            "tanggal": tanggal,
+            "tipe": tipe,
+            "icon": icon,
+        })
+
+    return files
+
 
 def get_db():
 
@@ -35,74 +88,55 @@ def get_db():
 @app.route("/")
 def index():
 
-    files = []
+    return render_template("index.html", files=get_file_list(), user=session.get("user"))
 
-    if not os.path.exists(UPLOAD_FOLDER):
-        os.makedirs(UPLOAD_FOLDER)
 
-    for nama_file in sorted(os.listdir(UPLOAD_FOLDER)):
+@app.route("/upload", methods=["GET", "POST"])
+def upload():
 
-        path = os.path.join(UPLOAD_FOLDER, nama_file)
+    if request.method == "POST":
+        if "document" not in request.files:
+            return render_template("upload.html", user=session.get("user"), error="Tidak ada file yang dipilih.")
 
-        if os.path.isfile(path):
+        file = request.files["document"]
 
-            ukuran = round(os.path.getsize(path) / 1024, 2)
+        if not file or file.filename == "":
+            return render_template("upload.html", user=session.get("user"), error="Tidak ada file yang dipilih.")
 
-            waktu = os.path.getmtime(path)
+        if not allowed_file(file.filename):
+            return render_template("upload.html", user=session.get("user"), error="Jenis file tidak diperbolehkan.")
 
-            tanggal = datetime.fromtimestamp(
-                waktu
-            ).strftime("%d-%m-%Y %H:%M")
+        filename = secure_filename(file.filename)
+        os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+        file.save(os.path.join(app.config["UPLOAD_FOLDER"], filename))
 
-            ext = os.path.splitext(nama_file)[1].lower()
+        return redirect(url_for("index"))
 
-            if ext == ".pdf":
-                tipe = "PDF"
-                icon = "bi-file-earmark-pdf text-danger"
+    return render_template("upload.html", user=session.get("user"))
 
-            elif ext in [".doc", ".docx"]:
-                tipe = "Word"
-                icon = "bi-file-earmark-word text-primary"
 
-            elif ext in [".xls", ".xlsx"]:
-                tipe = "Excel"
-                icon = "bi-file-earmark-excel text-success"
+@app.route("/upload_document", methods=["GET", "POST"])
+def upload_document():
 
-            elif ext in [".ppt", ".pptx"]:
-                tipe = "PowerPoint"
-                icon = "bi-file-earmark-ppt text-warning"
+    if request.method == "POST":
+        if "document" not in request.files:
+            return render_template("upload.html", user=session.get("user"), error="Tidak ada file yang dipilih.")
 
-            elif ext in [".jpg", ".jpeg", ".png"]:
-                tipe = "Gambar"
-                icon = "bi-file-earmark-image text-info"
+        file = request.files["document"]
 
-            elif ext in [".zip", ".rar", ".7z"]:
-                tipe = "Arsip"
-                icon = "bi-file-earmark-zip text-secondary"
+        if not file or file.filename == "":
+            return render_template("upload.html", user=session.get("user"), error="Tidak ada file yang dipilih.")
 
-            else:
-                tipe = "File"
-                icon = "bi-file-earmark"
+        if not allowed_file(file.filename):
+            return render_template("upload.html", user=session.get("user"), error="Jenis file tidak diperbolehkan.")
 
-            files.append({
+        filename = secure_filename(file.filename)
+        os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+        file.save(os.path.join(app.config["UPLOAD_FOLDER"], filename))
 
-                "nama": nama_file,
+        return redirect(url_for("index"))
 
-                "ukuran": ukuran,
-
-                "tanggal": tanggal,
-
-                "tipe": tipe,
-
-                "icon": icon
-
-            })
-
-    return render_template(
-        "index.html",
-        files=files,
-        user=session.get("user")
-    )
+    return render_template("upload.html", user=session.get("user"))
 
 
 @app.route("/preview/<path:nama_file>")
