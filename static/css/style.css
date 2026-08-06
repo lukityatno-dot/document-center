@@ -350,4 +350,70 @@ footer{
 
     }
 
+    .navbar{
+
+        padding:0.75rem 1rem;
+
+    }
+
+    .navbar-brand{
+
+        font-size:16px;
+
+    }
+
+    .navbar-brand img{
+
+        height:30px;
+
+        margin-right:8px;
+
+    }
+
+    .input-group,
+
+    .table-responsive{
+
+        width:100%;
+
+    }
+
+    .table-responsive{
+
+        overflow-x:auto;
+
+    }
+
+    .card-body .input-group,
+
+    .card-body .btn{
+
+        width:100%;
+
+    }
+
+    #search{
+
+        min-width:0;
+
+    }
+
+    .table tbody tr td{
+
+        white-space:nowrap;
+
+    }
+
+    .card-header h4{
+
+        font-size:1.05rem;
+
+    }
+
+    footer{
+
+        padding:20px 15px;
+
+    }
+
 }
