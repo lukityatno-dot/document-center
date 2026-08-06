@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+
+{% block title %}
+Document Center
+{% endblock %}
+
+{% block content %}
+
+<div class="row">
+
+    <div class="col-lg-4 mb-3">
+
+        <div class="card dashboard-card">
+
+            <div class="card-body text-center">
+
+                <i class="bi bi-folder2-open fs-1 text-primary"></i>
+
+                <h2 class="mt-2">{{ files|length }}</h2>
+
+                <p class="text-muted mb-0">
+                    Total Dokumen
+                </p>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="col-lg-4 mb-3">
+
+        <div class="card dashboard-card">
+
+            <div class="card-body text-center">
+
+                <i class="bi bi-download fs-1 text-success"></i>
+
+                <h2 class="mt-2">-</h2>
+
+                <p class="text-muted mb-0">
+                    Total Download
+                </p>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="col-lg-4 mb-3">
+
+        <div class="card dashboard-card">
+
+            <div class="card-body text-center">
+
+                <i class="bi bi-hdd-network fs-1 text-warning"></i>
+
+                <h2 class="mt-2">Online</h2>
+
+                <p class="text-muted mb-0">
+                    Status Server
+                </p>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<div class="card shadow-sm mb-4">
+
+    <div class="card-body">
+
+        <div class="row align-items-center">
+
+            <div class="col-lg-6">
+
+                <h3 class="mb-1">
+                    Document Center
+                </h3>
+
+                <p class="text-muted mb-0">
+                    Download dokumen internal perusahaan
+                </p>
+
+            </div>
+
+            <div class="col-lg-6 mt-3 mt-lg-0">
+
+                <div class="input-group">
+
+                    <span class="input-group-text">
+
+                        <i class="bi bi-search"></i>
+
+                    </span>
+
+                    <input
+                        type="text"
+                        id="search"
+                        class="form-control"
+                        placeholder="Cari dokumen...">
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<div class="card shadow-sm">
+
+    <div class="table-responsive">
+
+        <table class="table table-hover align-middle mb-0" id="tabelFile">
+
+            <thead class="table-light">
+
+                <tr>
+
+                    <th width="50"></th>
+
+                    <th>Nama Dokumen</th>
+
+                    <th>Tipe</th>
+
+                    <th>Ukuran</th>
+
+                    <th>Update</th>
+
+                    <th width="140">Aksi</th>
+
+                </tr>
+
+            </thead>
+
+            <tbody>
+
+            {% for file in files %}
+
+            <tr class="file-item">
+
+                <td>
+
+                    <i class="bi {{ file.icon }} fs-3"></i>
+
+                </td>
+
+                <td>
+
+                    <strong>{{ file.nama }}</strong>
+
+                </td>
+
+                <td>
+
+                    <span class="badge bg-secondary">
+
+                        {{ file.tipe }}
+
+                    </span>
+
+                </td>
+
+                <td>
+
+                    {{ file.ukuran }} KB
+
+                </td>
+
+                <td>
+
+                    {{ file.tanggal }}
+
+                </td>
+
+                <td>
+
+                    {% if file.tipe == "PDF" %}
+
+                    <a
+                        href="/preview/{{ file.nama }}"
+                        target="_blank"
+                        class="btn btn-success btn-sm">
+
+                        <i class="bi bi-eye"></i>
+
+                        Preview
+
+                    </a>
+
+                    {% endif %}
+
+                    <a
+                        href="/download/{{ file.nama }}"
+                        class="btn btn-primary btn-sm">
+
+                        <i class="bi bi-download"></i>
+
+                        Download
+
+                    </a>
+
+                    {% if user and user.role == "Administrator" %}
+
+                    <form
+                        method="POST"
+                        action="/delete/{{ file.nama }}"
+                        class="d-inline"
+                        onsubmit="return confirm('Yakin ingin menghapus dokumen ini?');">
+
+                        <button
+                            type="submit"
+                            class="btn btn-danger btn-sm">
+
+                            <i class="bi bi-trash"></i>
+
+                            Hapus
+
+                        </button>
+
+                    </form>
+
+                    {% endif %}
+
+                </td>
+
+            </tr>
+
+            {% endfor %}
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+
+<script>
+
+const search = document.getElementById("search");
+
+search.addEventListener("keyup", function(){
+
+    let keyword = this.value.toLowerCase();
+
+    document.querySelectorAll(".file-item").forEach(function(item){
+
+        if(item.innerText.toLowerCase().includes(keyword)){
+
+            item.style.display = "";
+
+        }else{
+
+            item.style.display = "none";
+
+        }
+
+    });
+
+});
+
+</script>
+
+{% endblock %}

@@ -1,0 +1,335 @@
+/* ==================================================
+   eL Hotel Yogyakarta
+   Document Center
+   Version : 2.0
+   Developer : Stefanus WH
+================================================== */
+
+:root{
+
+    --primary:#0A3D62;
+    --primary-hover:#082C47;
+
+    --secondary:#D4AF37;
+
+    --background:#F5F7FA;
+
+    --card:#FFFFFF;
+
+    --border:#E9ECEF;
+
+    --text:#2C3E50;
+
+}
+
+*{
+
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+
+}
+
+body{
+
+    background:var(--background);
+
+    color:var(--text);
+
+    font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif;
+
+}
+
+/* ======================================
+                NAVBAR
+====================================== */
+
+.navbar{
+
+    background:linear-gradient(90deg,#0A3D62,#145DA0);
+
+    min-height:70px;
+
+}
+
+.navbar-brand{
+
+    font-size:22px;
+
+    font-weight:600;
+
+}
+
+/* ======================================
+                CARD
+====================================== */
+
+.card{
+
+    border:none;
+
+    border-radius:15px;
+
+    transition:.25s;
+
+    overflow:hidden;
+
+}
+
+.card:hover{
+
+    transform:translateY(-3px);
+
+    box-shadow:0 15px 35px rgba(0,0,0,.08);
+
+}
+
+/* ======================================
+            DASHBOARD CARD
+====================================== */
+
+.dashboard-card{
+
+    text-align:center;
+
+}
+
+.dashboard-card .card-body{
+
+    padding:30px;
+
+}
+
+.dashboard-card i{
+
+    margin-bottom:10px;
+
+}
+
+.dashboard-card h2{
+
+    font-weight:bold;
+
+    margin:10px 0;
+
+}
+
+/* ======================================
+                SEARCH
+====================================== */
+
+.input-group{
+
+    height:48px;
+
+}
+
+.input-group-text{
+
+    background:#fff;
+
+    border-right:none;
+
+}
+
+.form-control{
+
+    border-left:none;
+
+    box-shadow:none !important;
+
+}
+
+.form-control:focus{
+
+    border-color:#ced4da;
+
+}
+
+/* ======================================
+                TABLE
+====================================== */
+
+.table{
+
+    margin-bottom:0;
+
+}
+
+.table thead{
+
+    background:#F8F9FA;
+
+}
+
+.table th{
+
+    border:none;
+
+    font-weight:600;
+
+    color:#555;
+
+}
+
+.table td{
+
+    vertical-align:middle;
+
+    border-color:#F0F0F0;
+
+}
+
+.table tbody tr{
+
+    transition:.2s;
+
+}
+
+.table tbody tr:hover{
+
+    background:#F8FBFF;
+
+}
+
+/* ======================================
+                BADGE
+====================================== */
+
+.badge{
+
+    font-size:12px;
+
+    padding:7px 12px;
+
+    border-radius:20px;
+
+}
+
+/* ======================================
+                BUTTON
+====================================== */
+
+.btn{
+
+    border-radius:10px;
+
+}
+
+.btn-primary{
+
+    background:var(--primary);
+
+    border:none;
+
+}
+
+.btn-primary:hover{
+
+    background:var(--primary-hover);
+
+}
+
+.btn-outline-light{
+
+    border-radius:10px;
+
+}
+
+/* ======================================
+                FILE ICON
+====================================== */
+
+.bi-file-earmark-pdf{
+
+    color:#DC3545;
+
+}
+
+.bi-file-earmark-word{
+
+    color:#0D6EFD;
+
+}
+
+.bi-file-earmark-excel{
+
+    color:#198754;
+
+}
+
+.bi-file-earmark-ppt{
+
+    color:#FD7E14;
+
+}
+
+.bi-file-earmark-image{
+
+    color:#6F42C1;
+
+}
+
+.bi-file-earmark-zip{
+
+    color:#6C757D;
+
+}
+
+.bi-file-earmark{
+
+    color:#495057;
+
+}
+
+/* ======================================
+                FOOTER
+====================================== */
+
+footer{
+
+    margin-top:40px;
+
+    padding:25px;
+
+    color:#777;
+
+    font-size:14px;
+
+}
+
+/* ======================================
+            RESPONSIVE
+====================================== */
+
+@media (max-width:992px){
+
+    .navbar-brand{
+
+        font-size:18px;
+
+    }
+
+    .dashboard-card{
+
+        margin-bottom:15px;
+
+    }
+
+}
+
+@media (max-width:768px){
+
+    .table{
+
+        font-size:14px;
+
+    }
+
+    .btn{
+
+        width:100%;
+
+    }
+
+}
