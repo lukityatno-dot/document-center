@@ -348,37 +348,33 @@ Document Center
 {% block scripts %}
 
 <script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const search = document.getElementById("search");
+        if (search) {
+            const filterRows = function () {
+                const keyword = search.value.trim().toLowerCase();
+                const rows = document.querySelectorAll("#tabelFile tbody tr");
 
-const search = document.getElementById("search");
+                rows.forEach(function (row) {
+                    const rowText = row.textContent.trim().toLowerCase();
+                    const matches = keyword === '' || rowText.includes(keyword);
+                    row.style.display = matches ? '' : 'none';
+                });
+            };
 
-search.addEventListener("keyup", function(){
-
-    let keyword = this.value.toLowerCase();
-
-    document.querySelectorAll(".file-item").forEach(function(item){
-
-        if(item.innerText.toLowerCase().includes(keyword)){
-
-            item.style.display = "";
-
-        }else{
-
-            item.style.display = "none";
-
+            search.addEventListener("input", filterRows);
+            search.addEventListener("keyup", filterRows);
         }
 
+        const selectAllCheckbox = document.getElementById('select-all');
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', function () {
+                document.querySelectorAll('.document-checkbox').forEach(function (checkbox) {
+                    checkbox.checked = selectAllCheckbox.checked;
+                });
+            });
+        }
     });
-
-});
-
-const selectAllCheckbox = document.getElementById('select-all');
-if (selectAllCheckbox) {
-    selectAllCheckbox.addEventListener('change', function () {
-        document.querySelectorAll('.document-checkbox').forEach(function (checkbox) {
-            checkbox.checked = selectAllCheckbox.checked;
-        });
-    });
-}
-
+</script>
 
 {% endblock %}

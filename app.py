@@ -33,6 +33,24 @@ DATABASE = "database/document_center.db"
 THUMB_FOLDER = os.path.join(app.static_folder, "thumbs")
 os.makedirs(THUMB_FOLDER, exist_ok=True)
 
+# Use absolute paths based on the app location so the service finds files regardless of CWD
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATABASE = os.path.join(BASE_DIR, 'database', 'document_center.db')
+UPLOAD_FOLDER = os.path.join(BASE_DIR, app.config.get('UPLOAD_FOLDER', 'files'))
+THUMB_FOLDER = os.path.join(app.root_path, 'static', 'thumbs')
+
+os.makedirs(os.path.dirname(DATABASE), exist_ok=True)
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(THUMB_FOLDER, exist_ok=True)
+
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+logger.info('App BASE_DIR=%s', BASE_DIR)
+logger.info('Database at %s', DATABASE)
+logger.info('Upload folder at %s', UPLOAD_FOLDER)
+logger.info('Thumb folder at %s', THUMB_FOLDER)
+
 ALLOWED_EXTENSIONS = {
     ".pdf", ".doc", ".docx", ".xls", ".xlsx",
     ".ppt", ".pptx", ".jpg", ".jpeg", ".png",
@@ -263,59 +281,67 @@ def upload():
         return "Forbidden", 403
 
     if request.method == "POST":
-        if "document" not in request.files:
+        files = request.files.getlist("documents")
+        if not files or all(not f.filename for f in files):
             return render_template("upload.html", user=session.get("user"), error="Tidak ada file yang dipilih.")
 
-        file = request.files["document"]
-
-        if not file or file.filename == "":
-            return render_template("upload.html", user=session.get("user"), error="Tidak ada file yang dipilih.")
-
-        if not allowed_file(file.filename):
-            return render_template("upload.html", user=session.get("user"), error="Jenis file tidak diperbolehkan.")
-
-        filename = secure_filename(file.filename)
         os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
-        file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
 
-        if os.path.exists(file_path):
-            return render_template("upload.html", user=session.get("user"), error="File sudah ada. Ganti nama file atau hapus file lama terlebih dahulu.")
+        uploaded = 0
+        errors = []
 
-        file.save(file_path)
+        for file in files:
+            if not file or file.filename == "":
+                continue
 
-        # compute checksum and check for duplicates
-        checksum = compute_checksum(file_path)
-        try:
-            with get_db() as conn:
-                existing = conn.execute("SELECT filename FROM documents WHERE checksum=?", (checksum,)).fetchone()
-        except Exception:
-            existing = None
+            if not allowed_file(file.filename):
+                errors.append(f"{file.filename}: Jenis file tidak diperbolehkan.")
+                continue
 
-        if existing:
-            # duplicate found, remove uploaded file and inform user
-            os.remove(file_path)
-            return render_template("upload.html", user=session.get("user"), error=f"File duplikat: sudah ada sebagai {existing['filename']}.")
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
 
-        # generate thumbnail for images
-        ext = os.path.splitext(filename)[1].lower()
-        thumb_rel = None
-        if ext in {'.jpg', '.jpeg', '.png', '.gif'}:
-            thumb_name = f"thumb_{filename}.jpg"
-            thumb_path = os.path.join(app.static_folder, 'thumbs', thumb_name)
-            ok = generate_thumbnail(file_path, thumb_path)
-            if ok:
-                thumb_rel = f"thumbs/{thumb_name}"
+            if os.path.exists(file_path):
+                errors.append(f"{filename}: File sudah ada.")
+                continue
 
-        # store document record with thumbnail and checksum
-        insert_document_with_thumbnail(
-            filename,
-            os.path.getsize(file_path),
-            os.path.splitext(filename)[1].lower(),
-            thumb_rel,
-            checksum
-        )
+            file.save(file_path)
 
-        flash("Dokumen berhasil diunggah.", "success")
+            checksum = compute_checksum(file_path)
+            try:
+                with get_db() as conn:
+                    existing = conn.execute("SELECT filename FROM documents WHERE checksum=?", (checksum,)).fetchone()
+            except Exception:
+                existing = None
+
+            if existing:
+                os.remove(file_path)
+                errors.append(f"{filename}: File duplikat sudah ada sebagai {existing['filename']}.")
+                continue
+
+            ext = os.path.splitext(filename)[1].lower()
+            thumb_rel = None
+            if ext in {'.jpg', '.jpeg', '.png', '.gif'}:
+                thumb_name = f"thumb_{filename}.jpg"
+                thumb_path = os.path.join(app.static_folder, 'thumbs', thumb_name)
+                ok = generate_thumbnail(file_path, thumb_path)
+                if ok:
+                    thumb_rel = f"thumbs/{thumb_name}"
+
+            insert_document_with_thumbnail(
+                filename,
+                os.path.getsize(file_path),
+                os.path.splitext(filename)[1].lower(),
+                thumb_rel,
+                checksum
+            )
+            uploaded += 1
+
+        if uploaded:
+            flash(f"{uploaded} dokumen berhasil diunggah.", "success")
+        if errors:
+            flash("; ".join(errors), "danger")
+
         return redirect(url_for("index"))
 
     return render_template("upload.html", user=session.get("user"))
