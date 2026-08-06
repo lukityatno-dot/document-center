@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2>Admin - Users</h2>
+  <a class="btn btn-primary mb-3" href="{{ url_for('admin_create_user') }}">Create User</a>
+  <table class="table table-sm">
+    <thead>
+      <tr>
+        <th>Username</th>
+        <th>Fullname</th>
+        <th>Role</th>
+        <th>Created</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td>{{ u.username }}</td>
+        <td>{{ u.fullname }}</td>
+        <td>{{ u.role }}</td>
+        <td>{{ u.created_at }}</td>
+        <td>
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin_edit_user', user_id=u.id) }}">Edit</a>
+          <form method="post" action="{{ url_for('admin_delete_user', user_id=u.id) }}" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-outline-danger" type="submit" onclick="return confirm('Hapus user ini?')">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

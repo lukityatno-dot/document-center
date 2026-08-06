@@ -198,6 +198,48 @@ body{
 
 }
 
+.document-checkbox{
+    width: 18px;
+    height: 18px;
+}
+
+@media (max-width: 767px) {
+    .table-responsive {
+        overflow-x: auto;
+    }
+
+    .table th, .table td {
+        white-space: nowrap;
+    }
+
+    .table td {
+        font-size: 0.95rem;
+    }
+
+    .table th:first-child,
+    .table td:first-child {
+        width: 1%;
+    }
+
+    .table td .bi {
+        font-size: 1.25rem;
+    }
+
+    #bulk-delete-button {
+        width: 100%;
+        margin-top: 0.75rem;
+    }
+
+    .p-3.border-top {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .p-3.border-top small {
+        margin-bottom: 0.75rem;
+    }
+}
+
 .table tbody tr{
 
     transition:.2s;

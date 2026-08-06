@@ -44,6 +44,13 @@
             </span>
 
             {% if user %}
+            {% if user.role and user.role == 'Administrator' %}
+            <a href="{{ url_for('admin_users') }}" class="btn btn-outline-light btn-sm d-flex align-items-center me-2">
+                <i class="bi bi-people-fill me-1"></i>
+                Manage Users
+            </a>
+            {% endif %}
+
             <a href="{{ url_for('logout') }}" class="btn btn-outline-light btn-sm d-flex align-items-center">
 
                 <i class="bi bi-box-arrow-right me-1"></i>
@@ -70,6 +77,19 @@
     </div>
 
 </nav>
+
+<div class="container mt-4">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'success' if category == 'success' else 'danger' }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+</div>
 
 <div class="modal fade" id="welcomePopup" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">

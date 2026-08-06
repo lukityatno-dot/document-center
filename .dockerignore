@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+env/
+venv/
+.git
+database/document_center.db
+static/thumbs/
+files/

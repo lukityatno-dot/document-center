@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2>{% if action=='create' %}Create User{% else %}Edit User{% endif %}</h2>
+
+  {% if error %}
+    <div class="alert alert-danger">{{ error }}</div>
+  {% endif %}
+
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+      <label class="form-label">Username</label>
+      <input class="form-control" name="username" {% if action=='edit' %}value="{{ u.username }}" readonly{% endif %} required>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Fullname</label>
+      <input class="form-control" name="fullname" value="{% if action=='edit' %}{{ u.fullname }}{% endif %}" required>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Role</label>
+      <select class="form-control form-select" name="role">
+        <option value="User" {% if action=='edit' and u.role=='User' %}selected{% endif %}>User</option>
+        <option value="Manager" {% if action=='edit' and u.role=='Manager' %}selected{% endif %}>Manager</option>
+        <option value="Administrator" {% if action=='edit' and u.role=='Administrator' %}selected{% endif %}>Administrator</option>
+      </select>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Password {% if action=='edit' %}(kosongkan untuk tidak mengubah){% endif %}</label>
+      <input class="form-control" name="password" type="password" {% if action=='create' %}required{% endif %}>
+    </div>
+
+    <button class="btn btn-primary" type="submit">{% if action=='create' %}Create{% else %}Save{% endif %}</button>
+    <a class="btn btn-secondary" href="{{ url_for('admin_users') }}">Cancel</a>
+  </form>
+</div>
+{% endblock %}

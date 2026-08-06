@@ -46,6 +46,8 @@ CREATE TABLE IF NOT EXISTS documents(
     filesize REAL,
 
     filetype TEXT,
+    
+    thumbnail TEXT,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 

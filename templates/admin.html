@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2>Admin - Documents</h2>
+  <div class="mb-3">
+    <a class="btn btn-sm btn-primary" href="{{ url_for('admin_users') }}">Manage Users</a>
+    {% if user and user.role in ['Administrator', 'Manager'] %}
+    <a class="btn btn-sm btn-primary ms-2" href="{{ url_for('replace_popup') }}">Replace Popup</a>
+    {% endif %}
+  </div>
+  <table class="table table-sm">
+    <thead>
+      <tr>
+        <th>Filename</th>
+        <th>Filesize (KB)</th>
+        <th>Filetype</th>
+        <th>Thumbnail</th>
+        <th>Checksum</th>
+        <th>Created</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in documents %}
+      <tr>
+        <td>{{ d.filename }}</td>
+        <td>{{ '%.2f'|format(d.filesize/1024) if d.filesize else '-' }}</td>
+        <td>{{ d.filetype }}</td>
+        <td>
+          {% if d.thumbnail %}
+            <img src="/{{ d.thumbnail }}" alt="thumb" style="height:48px;" />
+          {% else %}
+            -
+          {% endif %}
+        </td>
+        <td style="font-family:monospace; font-size:12px;">{{ d.checksum or '-' }}</td>
+        <td>{{ d.created_at }}</td>
+        <td>
+          <a class="btn btn-sm btn-outline-primary" href="{{ url_for('download', nama_file=d.filename) }}">Download</a>
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('preview', nama_file=d.filename) }}">Preview</a>
+          <form method="post" action="{{ url_for('delete_file', nama_file=d.filename) }}" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-outline-danger" type="submit" onclick="return confirm('Hapus file ini?')">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -5,24 +5,33 @@ from flask import (
     request,
     redirect,
     url_for,
-    session
+    session,
+    flash
 )
-
-from werkzeug.security import check_password_hash
+from flask_wtf import CSRFProtect
+from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
+from PIL import Image
 import sqlite3
 import os
 from datetime import datetime
+import hashlib
+from functools import wraps
 
 app = Flask(__name__)
 app.static_folder = "static"
 
-app.secret_key = "document-center-elhotel"
+app.secret_key = os.getenv("SECRET_KEY", "document-center-elhotel")
+app.config["UPLOAD_FOLDER"] = "files"
+app.config["WTF_CSRF_TIME_LIMIT"] = None
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
-UPLOAD_FOLDER = "files"
+CSRFProtect(app)
+
+UPLOAD_FOLDER = app.config["UPLOAD_FOLDER"]
 DATABASE = "database/document_center.db"
-
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+THUMB_FOLDER = os.path.join(app.static_folder, "thumbs")
+os.makedirs(THUMB_FOLDER, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {
     ".pdf", ".doc", ".docx", ".xls", ".xlsx",
@@ -58,6 +67,17 @@ def get_file_list():
 
     files = []
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+    # load thumbnail mapping from DB when available for faster lookup
+    thumb_map = {}
+    try:
+        with get_db() as conn:
+            rows = conn.execute("SELECT filename, thumbnail FROM documents").fetchall()
+            for r in rows:
+                if r["thumbnail"]:
+                    thumb_map[r["filename"]] = r["thumbnail"]
+    except Exception:
+        # ignore DB errors and fallback to filesystem check
+        thumb_map = {}
 
     for nama_file in sorted(os.listdir(app.config["UPLOAD_FOLDER"])):
         path = os.path.join(app.config["UPLOAD_FOLDER"], nama_file)
@@ -69,12 +89,21 @@ def get_file_list():
         ext = os.path.splitext(nama_file)[1].lower()
         tipe, icon = ICON_MAP.get(ext, ("File", "bi-file-earmark"))
 
+        # prefer DB-stored thumbnail path, fallback to filesystem
+        thumb_rel = thumb_map.get(nama_file)
+        if not thumb_rel:
+            thumb_name = f"thumb_{nama_file}.jpg"
+            thumb_path = os.path.join(app.static_folder, "thumbs", thumb_name)
+            if os.path.exists(thumb_path):
+                thumb_rel = f"thumbs/{thumb_name}"
+
         files.append({
             "nama": nama_file,
             "ukuran": ukuran,
             "tanggal": tanggal,
             "tipe": tipe,
             "icon": icon,
+            "thumb": thumb_rel,
         })
 
     return files
@@ -86,6 +115,9 @@ def get_db():
     conn.row_factory = sqlite3.Row
 
     return conn
+
+
+from flask_wtf.csrf import generate_csrf
 
 
 def get_popup_image():
@@ -106,41 +138,89 @@ def allowed_popup_file(filename):
 @app.context_processor
 def inject_popup_image():
 
-    return {"popup_image": get_popup_image()}
+    return {
+        "popup_image": get_popup_image(),
+        "csrf_token": generate_csrf,
+    }
+
+
+def generate_thumbnail(src_path, dest_path, size=(300, 300)):
+
+    try:
+        with Image.open(src_path) as img:
+            if img.mode not in ("RGB", "RGBA"):
+                img = img.convert("RGB")
+            img.thumbnail(size)
+            img.save(dest_path, format="JPEG", quality=85)
+            return True
+    except Exception:
+        return False
 
 
 def insert_document(filename, filesize, filetype):
 
-    conn = get_db()
-    conn.execute(
-        "INSERT INTO documents (filename, filesize, filetype) VALUES (?, ?, ?)",
-        (filename, filesize, filetype)
-    )
-    conn.commit()
-    conn.close()
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO documents (filename, filesize, filetype, thumbnail) VALUES (?, ?, ?, ?)",
+            (filename, filesize, filetype, None)
+        )
+
+
+def insert_document_with_thumbnail(filename, filesize, filetype, thumbnail, checksum=None):
+
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO documents (filename, filesize, filetype, thumbnail, checksum) VALUES (?, ?, ?, ?, ?)",
+            (filename, filesize, filetype, thumbnail, checksum)
+        )
+
+
+def compute_checksum(file_path):
+
+    h = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def ensure_documents_thumbnail_column():
+
+    with get_db() as conn:
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(documents)").fetchall()]
+        if 'thumbnail' not in cols:
+            conn.execute("ALTER TABLE documents ADD COLUMN thumbnail TEXT")
+        if 'checksum' not in cols:
+            conn.execute("ALTER TABLE documents ADD COLUMN checksum TEXT")
 
 
 def log_download(filename, username, ip_address):
 
-    conn = get_db()
-    conn.execute(
-        "INSERT INTO download_logs (filename, username, ip_address) VALUES (?, ?, ?)",
-        (filename, username, ip_address)
-    )
-    conn.commit()
-    conn.close()
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO download_logs (filename, username, ip_address) VALUES (?, ?, ?)",
+            (filename, username, ip_address)
+        )
+
+
+def delete_document_record(filename):
+
+    with get_db() as conn:
+        conn.execute(
+            "DELETE FROM documents WHERE filename=?",
+            (filename,)
+        )
 
 
 def get_stats():
 
-    conn = get_db()
-    stats_row = conn.execute(
-        "SELECT COUNT(*) AS total_documents FROM documents"
-    ).fetchone()
-    downloads_row = conn.execute(
-        "SELECT COUNT(*) AS total_downloads FROM download_logs"
-    ).fetchone()
-    conn.close()
+    with get_db() as conn:
+        stats_row = conn.execute(
+            "SELECT COUNT(*) AS total_documents FROM documents"
+        ).fetchone()
+        downloads_row = conn.execute(
+            "SELECT COUNT(*) AS total_downloads FROM download_logs"
+        ).fetchone()
 
     return {
         "total_documents": stats_row["total_documents"] if stats_row else 0,
@@ -149,20 +229,38 @@ def get_stats():
     }
 
 
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        user = session.get("user")
+        if not user or user.get("role") != "Administrator":
+            return "Forbidden", 403
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+# ensure DB schema includes thumbnail column when app starts
+try:
+    ensure_documents_thumbnail_column()
+except Exception:
+    pass
+
+
 @app.route("/")
 def index():
 
     user = session.get("user")
-    stats = {}
-
-    if user and user.get("role") == "Administrator":
-        stats = get_stats()
+    stats = get_stats()
 
     return render_template("index.html", files=get_file_list(), user=user, stats=stats)
 
 
 @app.route("/upload", methods=["GET", "POST"])
 def upload():
+    # only allow authenticated users to upload (User, Manager, Administrator)
+    user = session.get("user")
+    if not user or user.get("role") not in ("User", "Manager", "Administrator"):
+        return "Forbidden", 403
 
     if request.method == "POST":
         if "document" not in request.files:
@@ -179,43 +277,45 @@ def upload():
         filename = secure_filename(file.filename)
         os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
         file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+
+        if os.path.exists(file_path):
+            return render_template("upload.html", user=session.get("user"), error="File sudah ada. Ganti nama file atau hapus file lama terlebih dahulu.")
+
         file.save(file_path)
-        insert_document(
+
+        # compute checksum and check for duplicates
+        checksum = compute_checksum(file_path)
+        try:
+            with get_db() as conn:
+                existing = conn.execute("SELECT filename FROM documents WHERE checksum=?", (checksum,)).fetchone()
+        except Exception:
+            existing = None
+
+        if existing:
+            # duplicate found, remove uploaded file and inform user
+            os.remove(file_path)
+            return render_template("upload.html", user=session.get("user"), error=f"File duplikat: sudah ada sebagai {existing['filename']}.")
+
+        # generate thumbnail for images
+        ext = os.path.splitext(filename)[1].lower()
+        thumb_rel = None
+        if ext in {'.jpg', '.jpeg', '.png', '.gif'}:
+            thumb_name = f"thumb_{filename}.jpg"
+            thumb_path = os.path.join(app.static_folder, 'thumbs', thumb_name)
+            ok = generate_thumbnail(file_path, thumb_path)
+            if ok:
+                thumb_rel = f"thumbs/{thumb_name}"
+
+        # store document record with thumbnail and checksum
+        insert_document_with_thumbnail(
             filename,
             os.path.getsize(file_path),
-            os.path.splitext(filename)[1].lower()
+            os.path.splitext(filename)[1].lower(),
+            thumb_rel,
+            checksum
         )
 
-        return redirect(url_for("index"))
-
-    return render_template("upload.html", user=session.get("user"))
-
-
-@app.route("/upload_document", methods=["GET", "POST"])
-def upload_document():
-
-    if request.method == "POST":
-        if "document" not in request.files:
-            return render_template("upload.html", user=session.get("user"), error="Tidak ada file yang dipilih.")
-
-        file = request.files["document"]
-
-        if not file or file.filename == "":
-            return render_template("upload.html", user=session.get("user"), error="Tidak ada file yang dipilih.")
-
-        if not allowed_file(file.filename):
-            return render_template("upload.html", user=session.get("user"), error="Jenis file tidak diperbolehkan.")
-
-        filename = secure_filename(file.filename)
-        os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
-        file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-        file.save(file_path)
-        insert_document(
-            filename,
-            os.path.getsize(file_path),
-            os.path.splitext(filename)[1].lower()
-        )
-
+        flash("Dokumen berhasil diunggah.", "success")
         return redirect(url_for("index"))
 
     return render_template("upload.html", user=session.get("user"))
@@ -225,7 +325,7 @@ def upload_document():
 def replace_popup():
 
     user = session.get("user")
-    if not user or user.get("role") != "Administrator":
+    if not user or user.get("role") not in ("Administrator", "Manager"):
         return "Forbidden", 403
 
     error = None
@@ -250,6 +350,7 @@ def replace_popup():
                 if os.path.exists(other_path):
                     os.remove(other_path)
 
+                flash("Gambar popup berhasil diganti.", "success")
                 return redirect(url_for("index"))
 
     return render_template("replace_popup.html", user=user, error=error)
@@ -303,17 +404,11 @@ def login():
 
         password = request.form["password"]
 
-        conn = get_db()
-
-        user = conn.execute(
-
-            "SELECT * FROM users WHERE username=?",
-
-            (username,)
-
-        ).fetchone()
-
-        conn.close()
+        with get_db() as conn:
+            user = conn.execute(
+                "SELECT * FROM users WHERE username=?",
+                (username,)
+            ).fetchone()
 
         if user:
 
@@ -323,15 +418,12 @@ def login():
             ):
 
                 session["user"] = dict(user)
-
+                flash("Login berhasil.", "success")
                 return redirect(url_for("index"))
 
         return render_template(
-
             "login.html",
-
             error="Username atau Password salah."
-
         )
 
     return render_template("login.html")
@@ -342,15 +434,53 @@ def delete_file(nama_file):
 
     user = session.get("user")
 
-    if not user or user.get("role") != "Administrator":
+    if not user or user.get("role") not in ("Administrator", "Manager"):
         return "Forbidden", 403
 
     file_path = os.path.join(app.config["UPLOAD_FOLDER"], nama_file)
 
     if os.path.isfile(file_path):
         os.remove(file_path)
+        # remove thumbnail file if exists
+        thumb_name = f"thumb_{nama_file}.jpg"
+        thumb_path = os.path.join(app.static_folder, 'thumbs', thumb_name)
+        if os.path.exists(thumb_path):
+            os.remove(thumb_path)
+        delete_document_record(nama_file)
+        flash("Dokumen berhasil dihapus.", "success")
 
     return redirect(url_for("index"))
+
+
+@app.route("/delete_bulk", methods=["POST"])
+def delete_bulk():
+
+    user = session.get("user")
+
+    if not user or user.get("role") not in ("Administrator", "Manager"):
+        return "Forbidden", 403
+
+    files_to_delete = request.form.getlist("documents")
+    deleted_count = 0
+
+    for nama_file in files_to_delete:
+        file_path = os.path.join(app.config["UPLOAD_FOLDER"], nama_file)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
+            thumb_name = f"thumb_{nama_file}.jpg"
+            thumb_path = os.path.join(app.static_folder, 'thumbs', thumb_name)
+            if os.path.exists(thumb_path):
+                os.remove(thumb_path)
+            delete_document_record(nama_file)
+            deleted_count += 1
+
+    if deleted_count:
+        flash(f"{deleted_count} dokumen berhasil dihapus.", "success")
+    else:
+        flash("Tidak ada dokumen yang dihapus.", "warning")
+
+    return redirect(url_for("index"))
+
 
 @app.route("/logout")
 def logout():
@@ -358,6 +488,92 @@ def logout():
     session.clear()
 
     return redirect(url_for("index"))
+
+
+@app.route('/admin')
+@admin_required
+def admin():
+    with get_db() as conn:
+        docs = conn.execute('SELECT * FROM documents ORDER BY created_at DESC').fetchall()
+
+    return render_template('admin.html', documents=docs, user=session.get('user'))
+
+
+@app.route('/admin/users')
+@admin_required
+def admin_users():
+    with get_db() as conn:
+        users = conn.execute('SELECT id, username, fullname, role, created_at FROM users ORDER BY created_at DESC').fetchall()
+
+    return render_template('admin_users.html', users=users, user=session.get('user'))
+
+
+@app.route('/admin/users/create', methods=['GET', 'POST'])
+@admin_required
+def admin_create_user():
+    error = None
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        fullname = request.form.get('fullname')
+        role = request.form.get('role') or 'User'
+
+        if not username or not password or not fullname:
+            error = 'Isi semua field yang diperlukan.'
+        else:
+            pw_hash = generate_password_hash(password)
+            try:
+                with get_db() as conn:
+                    conn.execute('INSERT INTO users (username,password,fullname,role) VALUES (?,?,?,?)', (username, pw_hash, fullname, role))
+                flash('User berhasil dibuat.', 'success')
+                return redirect(url_for('admin_users'))
+            except Exception as e:
+                error = 'Gagal membuat user: ' + str(e)
+
+    return render_template('user_form.html', action='create', error=error, user=session.get('user'))
+
+
+@app.route('/admin/users/edit/<int:user_id>', methods=['GET', 'POST'])
+@admin_required
+def admin_edit_user(user_id):
+    with get_db() as conn:
+        u = conn.execute('SELECT id, username, fullname, role FROM users WHERE id=?', (user_id,)).fetchone()
+
+    if not u:
+        return 'Not found', 404
+
+    error = None
+    if request.method == 'POST':
+        fullname = request.form.get('fullname')
+        role = request.form.get('role') or 'User'
+        password = request.form.get('password')
+
+        try:
+            with get_db() as conn:
+                if password:
+                    pw_hash = generate_password_hash(password)
+                    conn.execute('UPDATE users SET fullname=?, role=?, password=? WHERE id=?', (fullname, role, pw_hash, user_id))
+                else:
+                    conn.execute('UPDATE users SET fullname=?, role=? WHERE id=?', (fullname, role, user_id))
+            flash('User berhasil diperbarui.', 'success')
+            return redirect(url_for('admin_users'))
+        except Exception as e:
+            error = 'Gagal memperbarui user: ' + str(e)
+
+    return render_template('user_form.html', action='edit', u=u, error=error, user=session.get('user'))
+
+
+@app.route('/admin/users/delete/<int:user_id>', methods=['POST'])
+@admin_required
+def admin_delete_user(user_id):
+    try:
+        with get_db() as conn:
+            conn.execute('DELETE FROM users WHERE id=?', (user_id,))
+        flash('User dihapus.', 'success')
+    except Exception as e:
+        flash('Gagal menghapus user: ' + str(e), 'danger')
+
+    return redirect(url_for('admin_users'))
 
 
 if __name__ == "__main__":

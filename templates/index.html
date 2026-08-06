@@ -143,6 +143,7 @@ Document Center
 
                 <div class="d-flex justify-content-end mb-3">
 
+                    {% if user and user.role in ['User','Manager','Administrator'] %}
                     <a href="{{ url_for('upload') }}" class="btn btn-primary me-2">
 
                         <i class="bi bi-upload"></i>
@@ -150,9 +151,17 @@ Document Center
                         Upload Dokumen
 
                     </a>
+                    {% endif %}
 
-                    {% if user and user.role == "Administrator" %}
-                    <a href="{{ url_for('replace_popup') }}" class="btn btn-outline-light">
+                    {% if user and user.role == 'Administrator' %}
+                    <a href="{{ url_for('admin_users') }}" class="btn btn-outline-secondary me-2">
+                        <i class="bi bi-people-fill"></i>
+                        Manage Users
+                    </a>
+                    {% endif %}
+
+                    {% if user and user.role in ['Administrator', 'Manager'] %}
+                    <a href="{{ url_for('replace_popup') }}" class="btn btn-primary">
 
                         <i class="bi bi-image"></i>
 
@@ -192,27 +201,23 @@ Document Center
 
     <div class="table-responsive">
 
-        <table class="table table-hover align-middle mb-0" id="tabelFile">
-
-            <thead class="table-light">
-
-                <tr>
-
-                    <th width="50"></th>
-
-                    <th>Nama Dokumen</th>
-
-                    <th>Tipe</th>
-
-                    <th>Ukuran</th>
-
-                    <th>Update</th>
-
-                    <th width="140">Aksi</th>
-
-                </tr>
-
-            </thead>
+        <form method="POST" action="{{ url_for('delete_bulk') }}" id="bulk-delete-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <table class="table table-hover align-middle mb-0" id="tabelFile">
+                <thead class="table-light">
+                    <tr>
+                        <th width="50">
+                            {% if user and user.role in ['Administrator', 'Manager'] %}
+                            <input type="checkbox" id="select-all" title="Pilih semua">
+                            {% endif %}
+                        </th>
+                        <th>Nama Dokumen</th>
+                        <th>Tipe</th>
+                        <th>Ukuran</th>
+                        <th>Update</th>
+                        <th width="140">Aksi</th>
+                    </tr>
+                </thead>
 
             <tbody>
 
@@ -220,9 +225,17 @@ Document Center
 
             <tr class="file-item">
 
-                <td>
+                <td class="text-center">
 
-                    <i class="bi {{ file.icon }} fs-3"></i>
+                    {% if user and user.role in ['Administrator', 'Manager'] %}
+                    <input type="checkbox" name="documents" value="{{ file.nama }}" class="document-checkbox">
+                    {% endif %}
+
+                    {% if file.thumb %}
+                    <img src="{{ url_for('static', filename=file.thumb) }}" alt="thumb" class="rounded" style="width:48px; height:48px; object-fit:cover;">
+                    {% else %}
+                    <i class="bi {{ file.icon }} fs-3 ms-2"></i>
+                    {% endif %}
 
                 </td>
 
@@ -281,13 +294,14 @@ Document Center
 
                     </a>
 
-                    {% if user and user.role == "Administrator" %}
+                    {% if user and user.role in ['Administrator','Manager'] %}
 
                     <form
                         method="POST"
                         action="/delete/{{ file.nama }}"
                         class="d-inline"
                         onsubmit="return confirm('Yakin ingin menghapus dokumen ini?');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
                         <button
                             type="submit"
@@ -312,6 +326,18 @@ Document Center
             </tbody>
 
         </table>
+
+        {% if user and user.role in ['Administrator','Manager'] %}
+        <div class="p-3 border-top bg-light d-flex justify-content-between align-items-center">
+            <small class="text-muted">Pilih kotak di kiri untuk menghapus beberapa file sekaligus.</small>
+            <button type="submit" class="btn btn-danger" id="bulk-delete-button" onclick="return confirm('Yakin ingin menghapus dokumen terpilih?');">
+                <i class="bi bi-trash"></i>
+                Hapus Terpilih
+            </button>
+        </div>
+        {% endif %}
+
+        </form>
 
     </div>
 
@@ -344,6 +370,15 @@ search.addEventListener("keyup", function(){
     });
 
 });
+
+const selectAllCheckbox = document.getElementById('select-all');
+if (selectAllCheckbox) {
+    selectAllCheckbox.addEventListener('change', function () {
+        document.querySelectorAll('.document-checkbox').forEach(function (checkbox) {
+            checkbox.checked = selectAllCheckbox.checked;
+        });
+    });
+}
 
 
 {% endblock %}
