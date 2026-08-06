@@ -316,6 +316,24 @@ footer{
 
 }
 
+.popup-modal img{
+
+    width:100%;
+
+    height:auto;
+
+    display:block;
+
+    border-radius:14px;
+
+}
+
+.popup-modal .btn-close{
+
+    z-index:2;
+
+}
+
 /* ======================================
             RESPONSIVE
 ====================================== */

@@ -15,6 +15,7 @@ import os
 from datetime import datetime
 
 app = Flask(__name__)
+app.static_folder = "static"
 
 app.secret_key = "document-center-elhotel"
 
@@ -28,6 +29,8 @@ ALLOWED_EXTENSIONS = {
     ".ppt", ".pptx", ".jpg", ".jpeg", ".png",
     ".zip", ".rar", ".7z",
 }
+POPUP_EXTENSIONS = {".jpg", ".jpeg", ".png"}
+POPUP_FILES = ["popup.jpg", "popup.png"]
 
 ICON_MAP = {
     ".pdf": ("PDF", "bi-file-earmark-pdf text-danger"),
@@ -85,10 +88,77 @@ def get_db():
     return conn
 
 
+def get_popup_image():
+
+    for filename in POPUP_FILES:
+        path = os.path.join(app.static_folder, "img", filename)
+        if os.path.exists(path):
+            return f"img/{filename}"
+
+    return "img/popup.png"
+
+
+def allowed_popup_file(filename):
+
+    return "." in filename and os.path.splitext(filename)[1].lower() in POPUP_EXTENSIONS
+
+
+@app.context_processor
+def inject_popup_image():
+
+    return {"popup_image": get_popup_image()}
+
+
+def insert_document(filename, filesize, filetype):
+
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO documents (filename, filesize, filetype) VALUES (?, ?, ?)",
+        (filename, filesize, filetype)
+    )
+    conn.commit()
+    conn.close()
+
+
+def log_download(filename, username, ip_address):
+
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO download_logs (filename, username, ip_address) VALUES (?, ?, ?)",
+        (filename, username, ip_address)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_stats():
+
+    conn = get_db()
+    stats_row = conn.execute(
+        "SELECT COUNT(*) AS total_documents FROM documents"
+    ).fetchone()
+    downloads_row = conn.execute(
+        "SELECT COUNT(*) AS total_downloads FROM download_logs"
+    ).fetchone()
+    conn.close()
+
+    return {
+        "total_documents": stats_row["total_documents"] if stats_row else 0,
+        "total_downloads": downloads_row["total_downloads"] if downloads_row else 0,
+        "total_files": len(get_file_list()),
+    }
+
+
 @app.route("/")
 def index():
 
-    return render_template("index.html", files=get_file_list(), user=session.get("user"))
+    user = session.get("user")
+    stats = {}
+
+    if user and user.get("role") == "Administrator":
+        stats = get_stats()
+
+    return render_template("index.html", files=get_file_list(), user=user, stats=stats)
 
 
 @app.route("/upload", methods=["GET", "POST"])
@@ -108,7 +178,13 @@ def upload():
 
         filename = secure_filename(file.filename)
         os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
-        file.save(os.path.join(app.config["UPLOAD_FOLDER"], filename))
+        file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+        file.save(file_path)
+        insert_document(
+            filename,
+            os.path.getsize(file_path),
+            os.path.splitext(filename)[1].lower()
+        )
 
         return redirect(url_for("index"))
 
@@ -132,11 +208,51 @@ def upload_document():
 
         filename = secure_filename(file.filename)
         os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
-        file.save(os.path.join(app.config["UPLOAD_FOLDER"], filename))
+        file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+        file.save(file_path)
+        insert_document(
+            filename,
+            os.path.getsize(file_path),
+            os.path.splitext(filename)[1].lower()
+        )
 
         return redirect(url_for("index"))
 
     return render_template("upload.html", user=session.get("user"))
+
+
+@app.route("/replace_popup", methods=["GET", "POST"])
+def replace_popup():
+
+    user = session.get("user")
+    if not user or user.get("role") != "Administrator":
+        return "Forbidden", 403
+
+    error = None
+
+    if request.method == "POST":
+        if "popup_file" not in request.files:
+            error = "Tidak ada file yang dipilih."
+        else:
+            file = request.files["popup_file"]
+            if not file or file.filename == "":
+                error = "Tidak ada file yang dipilih."
+            elif not allowed_popup_file(file.filename):
+                error = "Jenis file tidak diperbolehkan. Gunakan JPG atau PNG."
+            else:
+                filename = secure_filename(file.filename)
+                ext = os.path.splitext(filename)[1].lower()
+                save_name = "popup.jpg" if ext in {".jpg", ".jpeg"} else "popup.png"
+                save_path = os.path.join(app.static_folder, "img", save_name)
+                file.save(save_path)
+                other_name = "popup.png" if save_name == "popup.jpg" else "popup.jpg"
+                other_path = os.path.join(app.static_folder, "img", other_name)
+                if os.path.exists(other_path):
+                    os.remove(other_path)
+
+                return redirect(url_for("index"))
+
+    return render_template("replace_popup.html", user=user, error=error)
 
 
 @app.route("/preview/<path:nama_file>")
@@ -161,6 +277,11 @@ def preview(nama_file):
 
 @app.route("/download/<path:nama_file>")
 def download(nama_file):
+
+    user = session.get("user")
+    username = user.get("username") if user else None
+    ip_address = request.remote_addr
+    log_download(nama_file, username, ip_address)
 
     return send_from_directory(
 
