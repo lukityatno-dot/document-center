@@ -2,47 +2,62 @@
 
 {% block content %}
 <div class="container mt-4">
-  <h2>Admin - Documents</h2>
-  <div class="mb-3">
-    <a class="btn btn-sm btn-primary" href="{{ url_for('admin_users') }}">Manage Users</a>
-    {% if user and user.role in ['Administrator', 'Manager'] %}
-    <a class="btn btn-sm btn-primary ms-2" href="{{ url_for('replace_popup') }}">Replace Popup</a>
-    {% endif %}
+  <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-3 mb-3">
+    <div>
+      <h2 class="mb-1">Admin - Dokumen</h2>
+      <p class="text-muted mb-0">Kelola dokumen, kategori, dan preview dari panel admin.</p>
+    </div>
+    <div class="btn-group" role="group" aria-label="Admin actions">
+      <a class="btn btn-sm btn-primary" href="{{ url_for('upload') }}">Upload</a>
+      <a class="btn btn-sm btn-primary" href="{{ url_for('gallery') }}">Gallery Events</a>
+      <a class="btn btn-sm btn-primary" href="{{ url_for('gallery_upload') }}">Upload Event Foto</a>
+      <a class="btn btn-sm btn-primary" href="{{ url_for('admin_users') }}">Manage Users</a>
+      {% if user and user.role in ['Administrator', 'Manager'] %}
+      <a class="btn btn-sm btn-primary" href="{{ url_for('replace_popup') }}">Replace Popup</a>
+      {% endif %}
+    </div>
   </div>
-  <table class="table table-sm">
-    <thead>
-      <tr>
-        <th>Filename</th>
-        <th>Filesize (KB)</th>
-        <th>Filetype</th>
-        <th>Thumbnail</th>
-        <th>Checksum</th>
-        <th>Created</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody>
+
+  <div class="table-responsive shadow-sm rounded">
+    <table class="table table-bordered table-hover table-sm mb-0 align-middle">
+      <thead class="table-light text-uppercase small">
+        <tr>
+          <th>Filename</th>
+          <th>Filesize</th>
+          <th>Type</th>
+          <th>Category</th>
+          <th>Thumbnail</th>
+          <th>Checksum</th>
+          <th>Created</th>
+          <th class="text-center">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
       {% for d in documents %}
       <tr>
-        <td>{{ d.filename }}</td>
+        <td class="text-break" style="min-width:220px">{{ d.filename }}</td>
         <td>{{ '%.2f'|format(d.filesize/1024) if d.filesize else '-' }}</td>
         <td>{{ d.filetype }}</td>
+        <td>{{ d.category or '-' }}</td>
         <td>
           {% if d.thumbnail %}
-            <img src="/{{ d.thumbnail }}" alt="thumb" style="height:48px;" />
+            <img src="{{ url_for('static', filename=d.thumbnail) }}" alt="thumb" class="rounded" style="height:48px; width:auto;" />
           {% else %}
             -
           {% endif %}
         </td>
         <td style="font-family:monospace; font-size:12px;">{{ d.checksum or '-' }}</td>
         <td>{{ d.created_at }}</td>
-        <td>
-          <a class="btn btn-sm btn-outline-primary" href="{{ url_for('download', nama_file=d.filename) }}">Download</a>
-          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('preview', nama_file=d.filename) }}">Preview</a>
-          <form method="post" action="{{ url_for('delete_file', nama_file=d.filename) }}" style="display:inline;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-sm btn-outline-danger" type="submit" onclick="return confirm('Hapus file ini?')">Delete</button>
-          </form>
+        <td class="text-nowrap align-middle">
+          <div class="btn-group" role="group" aria-label="Document actions">
+            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('download', nama_file=d.filename) }}">Download</a>
+            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('preview', nama_file=d.filename) }}">Preview</a>
+            <a class="btn btn-sm btn-outline-warning" href="{{ url_for('admin_edit_document', doc_id=d.id) }}">Edit</a>
+            <form method="post" action="{{ url_for('delete_file', nama_file=d.filename) }}" style="display:inline; margin:0;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-outline-danger" type="submit" onclick="return confirm('Hapus file ini?')">Delete</button>
+            </form>
+          </div>
         </td>
       </tr>
       {% endfor %}

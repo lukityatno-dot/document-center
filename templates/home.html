@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+
+{% block title %}Home - eL Hotel Document Center{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="row gy-3">
+    <div class="col-12">
+      <div class="card shadow-sm p-4">
+        <h1>Selamat datang di eL Hotel</h1>
+        <p class="lead text-muted">Pilih layanan yang Anda butuhkan untuk mengelola dokumen dan galeri acara.</p>
+      </div>
+    </div>
+
+    <div class="col-md-6">
+      <a href="{{ url_for('documents') }}" class="text-decoration-none text-dark">
+        <div class="card shadow-sm h-100 border-primary">
+          <div class="card-body">
+            <h4 class="card-title">Document Center</h4>
+            <p class="card-text">Akses, cari, dan unduh dokumen internal perusahaan.</p>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <div class="col-md-6">
+      <a href="{{ url_for('gallery') }}" class="text-decoration-none text-dark">
+        <div class="card shadow-sm h-100 border-success">
+          <div class="card-body">
+            <h4 class="card-title">Galeri per Event</h4>
+            <p class="card-text">Lihat dokumentasi foto dan acara perusahaan dalam galeri event.</p>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <div class="col-md-6">
+      <a href="{{ url_for('upload') }}" class="text-decoration-none text-dark">
+        <div class="card shadow-sm h-100 border-secondary">
+          <div class="card-body">
+            <h4 class="card-title">Upload Dokumen</h4>
+            <p class="card-text">Unggah dokumen baru ke pusat dokumen jika Anda memiliki akses.</p>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    {% if user and user.role == 'Administrator' %}
+    <div class="col-md-6">
+      <a href="{{ url_for('admin') }}" class="text-decoration-none text-dark">
+        <div class="card shadow-sm h-100 border-warning">
+          <div class="card-body">
+            <h4 class="card-title">Admin Panel</h4>
+            <p class="card-text">Kelola pengguna dan dokumen dari panel admin.</p>
+          </div>
+        </div>
+      </a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

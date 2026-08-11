@@ -38,10 +38,12 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE = os.path.join(BASE_DIR, 'database', 'document_center.db')
 UPLOAD_FOLDER = os.path.join(BASE_DIR, app.config.get('UPLOAD_FOLDER', 'files'))
 THUMB_FOLDER = os.path.join(app.root_path, 'static', 'thumbs')
+GALLERY_FOLDER = os.path.join(app.root_path, 'static', 'gallery')
 
 os.makedirs(os.path.dirname(DATABASE), exist_ok=True)
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(THUMB_FOLDER, exist_ok=True)
+os.makedirs(GALLERY_FOLDER, exist_ok=True)
 
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -81,34 +83,38 @@ def allowed_file(filename):
     return "." in filename and os.path.splitext(filename)[1].lower() in ALLOWED_EXTENSIONS
 
 
-def get_file_list():
+def get_file_list(search_query=None, filter_type=None, filter_category=None, sort_by=None):
 
     files = []
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
-    # load thumbnail mapping from DB when available for faster lookup
-    thumb_map = {}
+    # load thumbnail and category metadata from DB when available for faster lookup
+    meta_map = {}
     try:
         with get_db() as conn:
-            rows = conn.execute("SELECT filename, thumbnail FROM documents").fetchall()
+            rows = conn.execute("SELECT filename, thumbnail, category FROM documents").fetchall()
             for r in rows:
-                if r["thumbnail"]:
-                    thumb_map[r["filename"]] = r["thumbnail"]
+                meta_map[r["filename"]] = {
+                    "thumbnail": r["thumbnail"],
+                    "category": r["category"],
+                }
     except Exception:
         # ignore DB errors and fallback to filesystem check
-        thumb_map = {}
+        meta_map = {}
 
-    for nama_file in sorted(os.listdir(app.config["UPLOAD_FOLDER"])):
+    for nama_file in os.listdir(app.config["UPLOAD_FOLDER"]):
         path = os.path.join(app.config["UPLOAD_FOLDER"], nama_file)
         if not os.path.isfile(path):
             continue
 
         ukuran = round(os.path.getsize(path) / 1024, 2)
-        tanggal = datetime.fromtimestamp(os.path.getmtime(path)).strftime("%d-%m-%Y %H:%M")
+        raw_date = os.path.getmtime(path)
+        tanggal = datetime.fromtimestamp(raw_date).strftime("%d-%m-%Y %H:%M")
         ext = os.path.splitext(nama_file)[1].lower()
         tipe, icon = ICON_MAP.get(ext, ("File", "bi-file-earmark"))
 
-        # prefer DB-stored thumbnail path, fallback to filesystem
-        thumb_rel = thumb_map.get(nama_file)
+        meta = meta_map.get(nama_file, {})
+        thumb_rel = meta.get("thumbnail")
+        category = meta.get("category")
         if not thumb_rel:
             thumb_name = f"thumb_{nama_file}.jpg"
             thumb_path = os.path.join(app.static_folder, "thumbs", thumb_name)
@@ -119,10 +125,43 @@ def get_file_list():
             "nama": nama_file,
             "ukuran": ukuran,
             "tanggal": tanggal,
+            "raw_date": raw_date,
             "tipe": tipe,
+            "category": category,
             "icon": icon,
             "thumb": thumb_rel,
         })
+
+    if filter_type:
+        files = [f for f in files if f["tipe"] == filter_type]
+
+    if filter_category:
+        files = [f for f in files if (f["category"] or "") == filter_category]
+
+    if search_query:
+        query = search_query.strip().lower()
+        terms = query.split()
+
+        def matches(file_data):
+            text = " ".join([
+                file_data["nama"],
+                file_data["tipe"],
+                file_data.get("category", "") or "",
+                str(file_data["ukuran"]),
+                file_data["tanggal"],
+            ]).lower()
+            return all(term in text for term in terms)
+
+        files = [f for f in files if matches(f)]
+
+    if sort_by == "name_desc":
+        files.sort(key=lambda x: x["nama"].lower(), reverse=True)
+    elif sort_by == "date_asc":
+        files.sort(key=lambda x: x["raw_date"])
+    elif sort_by == "date_desc":
+        files.sort(key=lambda x: x["raw_date"], reverse=True)
+    else:
+        files.sort(key=lambda x: x["nama"].lower())
 
     return files
 
@@ -184,12 +223,12 @@ def insert_document(filename, filesize, filetype):
         )
 
 
-def insert_document_with_thumbnail(filename, filesize, filetype, thumbnail, checksum=None):
+def insert_document_with_thumbnail(filename, filesize, filetype, thumbnail, checksum=None, category=None):
 
     with get_db() as conn:
         conn.execute(
-            "INSERT INTO documents (filename, filesize, filetype, thumbnail, checksum) VALUES (?, ?, ?, ?, ?)",
-            (filename, filesize, filetype, thumbnail, checksum)
+            "INSERT INTO documents (filename, filesize, filetype, thumbnail, checksum, category) VALUES (?, ?, ?, ?, ?, ?)",
+            (filename, filesize, filetype, thumbnail, checksum, category)
         )
 
 
@@ -210,6 +249,8 @@ def ensure_documents_thumbnail_column():
             conn.execute("ALTER TABLE documents ADD COLUMN thumbnail TEXT")
         if 'checksum' not in cols:
             conn.execute("ALTER TABLE documents ADD COLUMN checksum TEXT")
+        if 'category' not in cols:
+            conn.execute("ALTER TABLE documents ADD COLUMN category TEXT")
 
 
 def log_download(filename, username, ip_address):
@@ -219,6 +260,65 @@ def log_download(filename, username, ip_address):
             "INSERT INTO download_logs (filename, username, ip_address) VALUES (?, ?, ?)",
             (filename, username, ip_address)
         )
+
+
+def ensure_gallery_tables():
+    with get_db() as conn:
+        conn.execute("CREATE TABLE IF NOT EXISTS gallery_events (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT, category TEXT, cover_image TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+        conn.execute("CREATE TABLE IF NOT EXISTS gallery_photos (id INTEGER PRIMARY KEY AUTOINCREMENT, event_id INTEGER NOT NULL, filename TEXT NOT NULL, uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, position INTEGER DEFAULT 0, FOREIGN KEY(event_id) REFERENCES gallery_events(id))")
+        conn.execute("CREATE TABLE IF NOT EXISTS gallery_comments (id INTEGER PRIMARY KEY AUTOINCREMENT, event_id INTEGER NOT NULL, username TEXT NOT NULL, rating INTEGER NOT NULL, comment TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(event_id) REFERENCES gallery_events(id))")
+        # ensure columns exist and backfill position if necessary
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(gallery_events)").fetchall()]
+        if 'category' not in cols:
+            conn.execute("ALTER TABLE gallery_events ADD COLUMN category TEXT")
+        if 'cover_image' not in cols:
+            conn.execute("ALTER TABLE gallery_events ADD COLUMN cover_image TEXT")
+        pcols = [r[1] for r in conn.execute("PRAGMA table_info(gallery_photos)").fetchall()]
+        if 'position' not in pcols:
+            conn.execute("ALTER TABLE gallery_photos ADD COLUMN position INTEGER DEFAULT 0")
+            # backfill positions per event based on uploaded_at
+            events = conn.execute("SELECT id FROM gallery_events").fetchall()
+            for ev in events:
+                photos = conn.execute("SELECT id FROM gallery_photos WHERE event_id=? ORDER BY uploaded_at ASC", (ev[0],)).fetchall()
+                for idx, p in enumerate(photos, start=1):
+                    conn.execute("UPDATE gallery_photos SET position=? WHERE id=?", (idx, p[0]))
+
+
+def get_gallery_events():
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM gallery_events ORDER BY created_at DESC").fetchall()
+    return rows
+
+
+def get_gallery_event(event_id):
+    with get_db() as conn:
+        return conn.execute("SELECT * FROM gallery_events WHERE id=?", (event_id,)).fetchone()
+
+
+def get_event_photos(event_id):
+    with get_db() as conn:
+        return conn.execute("SELECT * FROM gallery_photos WHERE event_id=? ORDER BY position ASC, uploaded_at DESC", (event_id,)).fetchall()
+
+
+def save_gallery_photo(event_id, filename):
+    with get_db() as conn:
+        # compute next position
+        row = conn.execute("SELECT MAX(position) AS mx FROM gallery_photos WHERE event_id=?", (event_id,)).fetchone()
+        next_pos = (row['mx'] or 0) + 1 if row else 1
+        conn.execute("INSERT INTO gallery_photos (event_id, filename, position) VALUES (?, ?, ?)", (event_id, filename, next_pos))
+        existing = conn.execute("SELECT cover_image FROM gallery_events WHERE id=?", (event_id,)).fetchone()
+        if existing and not existing['cover_image']:
+            conn.execute("UPDATE gallery_events SET cover_image=? WHERE id=?", (filename, event_id))
+
+
+def get_event_comments(event_id):
+    with get_db() as conn:
+        return conn.execute("SELECT * FROM gallery_comments WHERE event_id=? ORDER BY created_at DESC", (event_id,)).fetchall()
+
+
+def save_gallery_comment(event_id, username, rating, comment):
+    with get_db() as conn:
+        conn.execute("INSERT INTO gallery_comments (event_id, username, rating, comment) VALUES (?, ?, ?, ?)", (event_id, username, rating, comment))
 
 
 def delete_document_record(filename):
@@ -257,20 +357,318 @@ def admin_required(f):
     return decorated_function
 
 
-# ensure DB schema includes thumbnail column when app starts
+# ensure DB schema includes thumbnail column and gallery tables when app starts
 try:
     ensure_documents_thumbnail_column()
+    ensure_gallery_tables()
 except Exception:
     pass
 
 
-@app.route("/")
-def index():
+def get_available_file_types():
+    types = set()
+    for file_data in get_file_list():
+        types.add(file_data["tipe"])
+    return sorted(types)
 
+
+def get_available_file_types_and_categories():
+    files = get_file_list()
+    types = sorted({f["tipe"] for f in files})
+    categories = sorted({f["category"] for f in files if f.get("category")})
+    return types, categories
+
+
+@app.route("/")
+def home():
     user = session.get("user")
     stats = get_stats()
+    return render_template("home.html", user=user, stats=stats)
 
-    return render_template("index.html", files=get_file_list(), user=user, stats=stats)
+
+@app.route("/gallery")
+def gallery():
+    user = session.get("user")
+    category_filter = request.args.get("category", "")
+    events = get_gallery_events()
+    categories = sorted({e['category'] for e in events if e['category']})
+    filtered_events = events
+    if category_filter:
+        filtered_events = [e for e in events if (e['category'] or '').lower() == category_filter.lower()]
+    return render_template("gallery.html", user=user, events=filtered_events, categories=categories, category_filter=category_filter)
+
+
+@app.route("/gallery/event/<int:event_id>")
+def gallery_event(event_id):
+    user = session.get("user")
+    event = get_gallery_event(event_id)
+    if not event:
+        return "Not found", 404
+    photos = get_event_photos(event_id)
+    comments = get_event_comments(event_id)
+    avg_rating = None
+    if comments:
+        avg_rating = round(sum(c["rating"] for c in comments) / len(comments), 1)
+    return render_template("gallery_event.html", user=user, event=event, photos=photos, comments=comments, avg_rating=avg_rating)
+
+
+@app.route('/gallery/event/<int:event_id>/edit', methods=['GET', 'POST'])
+def gallery_event_edit(event_id):
+    user = session.get('user')
+    if not user or user.get('role') not in ('Manager', 'Administrator'):
+        return 'Forbidden', 403
+
+    event = get_gallery_event(event_id)
+    if not event:
+        return 'Not found', 404
+
+    photos = get_event_photos(event_id)
+
+    error = None
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        description = request.form.get('description', '').strip()
+        category = request.form.get('category', '').strip() or None
+        cover_photo_id = request.form.get('cover_photo')
+
+        if not name:
+            error = 'Nama event diperlukan.'
+        else:
+            with get_db() as conn:
+                conn.execute('UPDATE gallery_events SET name=?, description=?, category=? WHERE id=?', (name, description, category, event_id))
+                if cover_photo_id:
+                    # find filename for photo id
+                    row = conn.execute('SELECT filename FROM gallery_photos WHERE id=? AND event_id=?', (cover_photo_id, event_id)).fetchone()
+                    if row:
+                        conn.execute('UPDATE gallery_events SET cover_image=? WHERE id=?', (row['filename'], event_id))
+            flash('Event diperbarui.', 'success')
+            return redirect(url_for('gallery_event', event_id=event_id))
+
+    return render_template('gallery_event_edit.html', user=user, event=event, photos=photos, error=error)
+
+
+@app.route("/gallery/event/<int:event_id>/comment", methods=["POST"])
+def gallery_event_comment(event_id):
+    user = session.get("user")
+    if not user:
+        return redirect(url_for("login"))
+
+    event = get_gallery_event(event_id)
+    if not event:
+        return "Not found", 404
+
+    rating = request.form.get("rating")
+    comment = request.form.get("comment", "").strip()
+    if not rating or not comment:
+        flash("Rating dan komentar diperlukan.", "danger")
+        return redirect(url_for("gallery_event", event_id=event_id))
+
+    try:
+        rating_val = int(rating)
+        if rating_val < 1 or rating_val > 5:
+            raise ValueError
+    except ValueError:
+        flash("Rating harus antara 1 sampai 5.", "danger")
+        return redirect(url_for("gallery_event", event_id=event_id))
+
+    save_gallery_comment(event_id, user.get("username"), rating_val, comment)
+    flash("Komentar berhasil dikirim.", "success")
+    return redirect(url_for("gallery_event", event_id=event_id))
+
+
+@app.route('/gallery/photo/<int:photo_id>/delete', methods=['POST'])
+def gallery_photo_delete(photo_id):
+    user = session.get('user')
+    if not user or user.get('role') not in ('Manager', 'Administrator'):
+        return 'Forbidden', 403
+
+    with get_db() as conn:
+        row = conn.execute('SELECT filename, event_id FROM gallery_photos WHERE id=?', (photo_id,)).fetchone()
+        if not row:
+            return 'Not found', 404
+        filename = row['filename']
+        event_id = row['event_id']
+
+        # delete file from static
+        file_path = os.path.join(app.static_folder, filename)
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except Exception:
+            pass
+
+        conn.execute('DELETE FROM gallery_photos WHERE id=?', (photo_id,))
+
+        # if cover image was this file, update cover
+        ev = conn.execute('SELECT cover_image FROM gallery_events WHERE id=?', (event_id,)).fetchone()
+        if ev and ev['cover_image'] == filename:
+            new = conn.execute('SELECT filename FROM gallery_photos WHERE event_id=? ORDER BY uploaded_at DESC LIMIT 1', (event_id,)).fetchone()
+            if new:
+                conn.execute('UPDATE gallery_events SET cover_image=? WHERE id=?', (new['filename'], event_id))
+            else:
+                conn.execute('UPDATE gallery_events SET cover_image=NULL WHERE id=?', (event_id,))
+
+    flash('Foto dihapus.', 'success')
+    return redirect(url_for('gallery_event', event_id=event_id))
+
+
+@app.route('/gallery/photo/<int:photo_id>/set_cover', methods=['POST'])
+def gallery_photo_set_cover(photo_id):
+    user = session.get('user')
+    if not user or user.get('role') not in ('Manager', 'Administrator'):
+        return 'Forbidden', 403
+
+    with get_db() as conn:
+        row = conn.execute('SELECT filename, event_id FROM gallery_photos WHERE id=?', (photo_id,)).fetchone()
+        if not row:
+            return 'Not found', 404
+        conn.execute('UPDATE gallery_events SET cover_image=? WHERE id=?', (row['filename'], row['event_id']))
+        event_id = row['event_id']
+
+    flash('Cover diperbarui.', 'success')
+    return redirect(url_for('gallery_event', event_id=event_id))
+
+
+@app.route('/gallery/event/<int:event_id>/reorder', methods=['POST'])
+def gallery_event_reorder(event_id):
+    user = session.get('user')
+    if not user or user.get('role') not in ('Manager', 'Administrator'):
+        return jsonify({'error':'forbidden'}), 403
+
+    # expect JSON body: { order: [photo_id,...] }
+    data = None
+    try:
+        data = request.get_json(force=True)
+    except Exception:
+        return jsonify({'error':'invalid json'}), 400
+
+    if not data or 'order' not in data or not isinstance(data['order'], list):
+        return jsonify({'error':'invalid payload'}), 400
+
+    order = data['order']
+    with get_db() as conn:
+        # validate all ids belong to event
+        rows = conn.execute('SELECT id FROM gallery_photos WHERE event_id=?', (event_id,)).fetchall()
+        valid_ids = {r['id'] for r in rows}
+        if not all(isinstance(x, int) and x in valid_ids for x in order):
+            return jsonify({'error':'invalid ids'}), 400
+
+        # update positions
+        for idx, pid in enumerate(order, start=1):
+            conn.execute('UPDATE gallery_photos SET position=? WHERE id=? AND event_id=?', (idx, pid, event_id))
+
+    return jsonify({'ok':True})
+
+
+@app.route("/gallery/upload", methods=["GET", "POST"])
+def gallery_upload():
+    user = session.get("user")
+    if not user or user.get("role") not in ("Manager", "Administrator"):
+        return "Forbidden", 403
+
+    error = None
+    if request.method == "POST":
+        event_id = request.form.get("event_id")
+        name = request.form.get("name", "").strip()
+        description = request.form.get("description", "").strip()
+        files = request.files.getlist("photos")
+
+        if not files or all(not f.filename for f in files):
+            error = "Tidak ada foto yang dipilih."
+        else:
+            category = request.form.get("category", "").strip() or None
+            if event_id:
+                event = get_gallery_event(event_id)
+                if not event:
+                    error = "Event tidak ditemukan."
+                else:
+                    if not category:
+                        category = event['category']
+                    with get_db() as conn:
+                        conn.execute(
+                            "UPDATE gallery_events SET category=?, description=? WHERE id=?",
+                            (category, description, event_id)
+                        )
+            else:
+                if not name:
+                    error = "Nama event diperlukan."
+                else:
+                    with get_db() as conn:
+                        cursor = conn.execute(
+                            "INSERT INTO gallery_events (name, description, category) VALUES (?, ?, ?)",
+                            (name, description, category)
+                        )
+                        event_id = cursor.lastrowid
+
+            if not error:
+                event_folder = os.path.join(GALLERY_FOLDER, f"event_{event_id}")
+                os.makedirs(event_folder, exist_ok=True)
+                saved = 0
+                saved_files = []
+                for photo in files:
+                    if not photo or photo.filename == "":
+                        continue
+                    filename = secure_filename(photo.filename)
+                    ext = os.path.splitext(filename)[1].lower()
+                    if ext not in {'.jpg', '.jpeg', '.png', '.gif'}:
+                        continue
+                    dest = os.path.join(event_folder, filename)
+                    base, ext = os.path.splitext(filename)
+                    counter = 1
+                    while os.path.exists(dest):
+                        filename = f"{base}_{counter}{ext}"
+                        dest = os.path.join(event_folder, filename)
+                        counter += 1
+                    photo.save(dest)
+                    saved_path = f"gallery/event_{event_id}/{filename}"
+                    save_gallery_photo(event_id, saved_path)
+                    saved_files.append(saved_path)
+                    saved += 1
+                # set cover if user selected one during upload (match by basename)
+                cover_basename = request.form.get('cover_basename')
+                if cover_basename and saved_files:
+                    chosen = None
+                    for sf in saved_files:
+                        if os.path.basename(sf) == cover_basename:
+                            chosen = sf
+                            break
+                    if chosen:
+                        with get_db() as conn:
+                            conn.execute('UPDATE gallery_events SET cover_image=? WHERE id=?', (chosen, event_id))
+
+                if saved:
+                    flash(f"{saved} foto berhasil diunggah ke event.", "success")
+                    return redirect(url_for("gallery_event", event_id=event_id))
+                error = "Tidak ada foto yang berhasil diunggah."
+
+    events = get_gallery_events()
+    return render_template("gallery_upload.html", user=user, error=error, events=events)
+
+
+@app.route("/documents")
+def documents():
+
+    user = session.get("user")
+    query = request.args.get("q", "")
+    filter_type = request.args.get("type", "")
+    filter_category = request.args.get("category", "")
+    sort_by = request.args.get("sort", "name_asc")
+    files = get_file_list(query, filter_type or None, filter_category or None, sort_by)
+    types, categories = get_available_file_types_and_categories()
+    stats = get_stats()
+
+    return render_template(
+        "index.html",
+        files=files,
+        user=user,
+        stats=stats,
+        query=query,
+        filter_type=filter_type,
+        filter_category=filter_category,
+        sort_by=sort_by,
+        types=types,
+        categories=categories,
+    )
 
 
 @app.route("/upload", methods=["GET", "POST"])
@@ -328,12 +726,15 @@ def upload():
                 if ok:
                     thumb_rel = f"thumbs/{thumb_name}"
 
+            category = request.form.get('category', '').strip() or None
+
             insert_document_with_thumbnail(
                 filename,
                 os.path.getsize(file_path),
                 os.path.splitext(filename)[1].lower(),
                 thumb_rel,
-                checksum
+                checksum,
+                category
             )
             uploaded += 1
 
@@ -342,7 +743,7 @@ def upload():
         if errors:
             flash("; ".join(errors), "danger")
 
-        return redirect(url_for("index"))
+        return redirect(url_for("documents"))
 
     return render_template("upload.html", user=session.get("user"))
 
@@ -377,7 +778,7 @@ def replace_popup():
                     os.remove(other_path)
 
                 flash("Gambar popup berhasil diganti.", "success")
-                return redirect(url_for("index"))
+                return redirect(url_for("documents"))
 
     return render_template("replace_popup.html", user=user, error=error)
 
@@ -445,7 +846,7 @@ def login():
 
                 session["user"] = dict(user)
                 flash("Login berhasil.", "success")
-                return redirect(url_for("index"))
+                return redirect(url_for("documents"))
 
         return render_template(
             "login.html",
@@ -475,7 +876,7 @@ def delete_file(nama_file):
         delete_document_record(nama_file)
         flash("Dokumen berhasil dihapus.", "success")
 
-    return redirect(url_for("index"))
+    return redirect(url_for("documents"))
 
 
 @app.route("/delete_bulk", methods=["POST"])
@@ -505,7 +906,7 @@ def delete_bulk():
     else:
         flash("Tidak ada dokumen yang dihapus.", "warning")
 
-    return redirect(url_for("index"))
+    return redirect(url_for("documents"))
 
 
 @app.route("/logout")
@@ -513,7 +914,7 @@ def logout():
 
     session.clear()
 
-    return redirect(url_for("index"))
+    return redirect(url_for("home"))
 
 
 @app.route('/admin')
@@ -523,6 +924,29 @@ def admin():
         docs = conn.execute('SELECT * FROM documents ORDER BY created_at DESC').fetchall()
 
     return render_template('admin.html', documents=docs, user=session.get('user'))
+
+
+@app.route('/admin/documents/edit/<int:doc_id>', methods=['GET', 'POST'])
+@admin_required
+def admin_edit_document(doc_id):
+    with get_db() as conn:
+        doc = conn.execute('SELECT id, filename, category FROM documents WHERE id=?', (doc_id,)).fetchone()
+
+    if not doc:
+        return 'Not found', 404
+
+    error = None
+    if request.method == 'POST':
+        category = request.form.get('category', '').strip() or None
+        try:
+            with get_db() as conn:
+                conn.execute('UPDATE documents SET category=? WHERE id=?', (category, doc_id))
+            flash('Kategori dokumen berhasil diperbarui.', 'success')
+            return redirect(url_for('admin'))
+        except Exception as e:
+            error = 'Gagal memperbarui dokumen: ' + str(e)
+
+    return render_template('admin_doc_form.html', doc=doc, error=error, user=session.get('user'))
 
 
 @app.route('/admin/users')

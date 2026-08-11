@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+
+{% block title %}Upload Galeri Event{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <div class="card shadow-sm">
+        <div class="card-header">
+          <h4 class="mb-0">Upload Galeri Event</h4>
+        </div>
+        <div class="card-body">
+          {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+          {% endif %}
+          <form method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="cover_basename" id="cover_basename" value="">
+            <div class="mb-3">
+              <label class="form-label">Pilih Event</label>
+              <select class="form-select" name="event_id">
+                <option value="">Buat event baru</option>
+                {% for event in events %}
+                <option value="{{ event.id }}">{{ event.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Nama Event Baru</label>
+              <input class="form-control" name="name" placeholder="Contoh: Workshop Internal Januari">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Deskripsi Event</label>
+              <textarea class="form-control" name="description" rows="3"></textarea>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Kategori Event</label>
+              <input class="form-control" name="category" placeholder="Contoh: Workshop, Gathering, Training">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Pilih Foto</label>
+              <input type="file" id="photosInput" name="photos" class="form-control" multiple required accept="image/*">
+              <div id="previewArea" class="mt-3 row g-2"></div>
+            </div>
+            <div class="d-flex justify-content-between">
+              <a href="{{ url_for('gallery') }}" class="btn btn-secondary">Kembali</a>
+              <button type="submit" class="btn btn-primary">Upload Foto</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+document.getElementById('photosInput').addEventListener('change', function(e){
+  const files = Array.from(e.target.files || []);
+  const preview = document.getElementById('previewArea');
+  preview.innerHTML = '';
+  files.forEach((file, idx) => {
+    if(!file.type.startsWith('image/')) return;
+    const col = document.createElement('div'); col.className = 'col-3 text-center';
+    const img = document.createElement('img');
+    img.className = 'img-fluid rounded';
+    img.style.height = '120px'; img.style.objectFit = 'cover'; img.style.width = '100%';
+    img.alt = file.name;
+    const reader = new FileReader();
+    reader.onload = function(ev){ img.src = ev.target.result; }
+    reader.readAsDataURL(file);
+
+    const label = document.createElement('div');
+    label.className = 'mt-1';
+    const radio = document.createElement('input');
+    radio.type = 'radio'; radio.name = 'cover_choice'; radio.value = file.name; radio.id = 'cover_'+idx;
+    radio.addEventListener('change', function(){ document.getElementById('cover_basename').value = this.value; });
+    const radioLabel = document.createElement('label'); radioLabel.htmlFor = 'cover_'+idx; radioLabel.innerText = ' Set as cover';
+
+    label.appendChild(radio);
+    label.appendChild(radioLabel);
+    col.appendChild(img);
+    col.appendChild(label);
+    preview.appendChild(col);
+  });
+  // clear hidden if none selected
+  document.getElementById('cover_basename').value = '';
+});
+</script>
+{% endblock %}

@@ -1,0 +1,254 @@
+{% extends 'base.html' %}
+
+{% block title %}Galeri {{ event.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h2>{{ event.name }}</h2>
+      <p class="text-muted">{{ event.description }}</p>
+    </div>
+    <div>
+      <a href="{{ url_for('gallery') }}" class="btn btn-secondary">Kembali ke Galeri</a>
+      {% if user and user.role in ['Manager', 'Administrator'] %}
+      <a href="{{ url_for('gallery_upload') }}" class="btn btn-primary ms-2">Upload Foto</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="mb-4 d-flex gap-2 align-items-center flex-wrap">
+    {% if event.category %}
+    <span class="badge bg-secondary">Kategori: {{ event.category }}</span>
+    {% endif %}
+    {% if avg_rating is not none %}
+    <span class="badge bg-warning text-dark">Rating rata-rata: {{ avg_rating }} / 5</span>
+    {% endif %}
+  </div>
+
+  {% if photos %}
+  <!-- Carousel for album photos -->
+  <div id="albumCarousel" class="carousel slide mb-4" data-bs-ride="carousel">
+    <div class="carousel-inner">
+      {% for photo in photos %}
+      <div class="carousel-item {% if loop.first %}active{% endif %}">
+        <img src="{{ url_for('static', filename=photo.filename) }}" class="d-block w-100" style="max-height:600px; object-fit:cover;" alt="Foto event">
+      </div>
+      {% endfor %}
+    </div>
+    <button class="carousel-control-prev" type="button" data-bs-target="#albumCarousel" data-bs-slide="prev">
+      <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+      <span class="visually-hidden">Previous</span>
+    </button>
+    <button class="carousel-control-next" type="button" data-bs-target="#albumCarousel" data-bs-slide="next">
+      <span class="carousel-control-next-icon" aria-hidden="true"></span>
+      <span class="visually-hidden">Next</span>
+    </button>
+  </div>
+
+  <div class="row row-cols-4 g-2 mb-4">
+    {% for photo in photos %}
+    <div class="col" draggable="true" data-photo-id="{{ photo.id }}">
+      <a href="#albumCarousel" data-bs-slide-to="{{ loop.index0 }}" class="thumb-link">
+        <img src="{{ url_for('static', filename=photo.filename) }}" class="img-fluid rounded thumb-img" style="height:100px; object-fit:cover; width:100%;" data-index="{{ loop.index0 }}" data-photo-id="{{ photo.id }}" alt="thumb">
+      </a>
+      {% if user and user.role in ['Manager','Administrator'] %}
+      <div class="d-flex justify-content-center gap-1 mt-1">
+        <form method="post" action="{{ url_for('gallery_photo_set_cover', photo_id=photo.id) }}" style="display:inline;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-sm btn-outline-primary" type="submit">Set Cover</button>
+        </form>
+        <form method="post" action="{{ url_for('gallery_photo_delete', photo_id=photo.id) }}" style="display:inline;" onsubmit="return confirm('Hapus foto ini?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-sm btn-outline-danger" type="submit">Hapus</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  
+  <!-- Lightbox modal -->
+  <div class="modal fade" id="lightboxModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen-sm-down modal-xl modal-dialog-centered">
+      <div class="modal-content bg-transparent border-0">
+        <div class="modal-body p-0 position-relative">
+          <button type="button" class="btn-close btn-close-white position-absolute top-0 end-0 m-3" data-bs-dismiss="modal" aria-label="Close"></button>
+          <a id="lightboxDownload" href="#" download class="btn btn-sm btn-outline-light text-white position-absolute top-0 end-0 me-5 mt-3" style="z-index:10; opacity:.7; background:rgba(255,255,255,.1); border:none;">
+            <i class="bi bi-download"></i>
+          </a>
+          <img id="lightboxImage" src="" class="img-fluid w-100 h-100" style="object-fit:contain; background:#000;" alt="Preview">
+        </div>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="alert alert-info">Belum ada foto untuk event ini.</div>
+  {% endif %}
+
+  <div class="row mt-5">
+    <div class="col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h5 class="card-title">Berikan Rating & Komentar</h5>
+          {% if user %}
+          <form method="post" action="{{ url_for('gallery_event_comment', event_id=event.id) }}">
+            <div class="mb-3">
+              <label class="form-label">Rating</label>
+              <select name="rating" class="form-select">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5" selected>5</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Komentar</label>
+              <textarea name="comment" class="form-control" rows="4" required></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary">Kirim Komentar</button>
+          </form>
+          {% else %}
+          <div class="alert alert-warning">Silakan <a href="{{ url_for('login') }}">login</a> untuk memberi rating atau komentar.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h5 class="card-title">Komentar Peserta</h5>
+          {% if comments %}
+          {% for comment in comments %}
+          <div class="mb-3 border-bottom pb-2">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <strong>{{ comment.username }}</strong>
+              <span class="badge bg-info text-dark">{{ comment.rating }} / 5</span>
+            </div>
+            <p class="mb-1">{{ comment.comment }}</p>
+            <small class="text-muted">{{ comment.created_at }}</small>
+          </div>
+          {% endfor %}
+          {% else %}
+          <div class="alert alert-secondary">Belum ada komentar untuk event ini.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// drag & drop reorder for thumbnails (managers/admins only)
+document.addEventListener('DOMContentLoaded', function(){
+  const role = '{{ user.role if user and user.role else '' }}';
+  if(!['Manager','Administrator'].includes(role)) return;
+
+  const container = document.querySelector('.row.row-cols-4');
+  if(!container) return;
+
+  let dragEl = null;
+  container.querySelectorAll('[draggable="true"]').forEach(function(el){
+    el.addEventListener('dragstart', function(e){
+      dragEl = el;
+      e.dataTransfer.effectAllowed = 'move';
+      el.classList.add('dragging');
+    });
+    el.addEventListener('dragend', function(){
+      el.classList.remove('dragging');
+      dragEl = null;
+    });
+    el.addEventListener('dragover', function(e){
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+    });
+    el.addEventListener('drop', function(e){
+      e.preventDefault();
+      if(!dragEl || dragEl === el) return;
+      // swap positions in DOM: insert dragEl before this element
+      const parent = el.parentNode;
+      parent.insertBefore(dragEl, el);
+      // send new order to server
+      const ids = Array.from(container.querySelectorAll('[data-photo-id]')).map(x=>parseInt(x.getAttribute('data-photo-id')));
+      fetch('{{ url_for("gallery_event_reorder", event_id=event.id) }}', {
+        method: 'POST',
+        headers: {
+          'Content-Type':'application/json',
+          'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({order: ids})
+      }).then(r=>r.json()).then(j=>{
+        if(j.ok){
+          // optionally show toast
+        } else {
+          alert('Gagal menyimpan urutan: '+(j.error||'unknown'))
+        }
+      }).catch(err=>{alert('Network error')});
+    });
+  });
+
+  // carousel + lightbox + thumbnail active styling
+  var carouselEl = document.getElementById('albumCarousel');
+  var thumbImgs = document.querySelectorAll('.thumb-img');
+  function setActiveThumb(index){
+    thumbImgs.forEach(function(t){ t.classList.remove('thumb-active'); });
+    var el = document.querySelector('.thumb-img[data-index="'+index+'"]');
+    if(el) el.classList.add('thumb-active');
+  }
+
+  if(carouselEl){
+    carouselEl.addEventListener('slid.bs.carousel', function(e){
+      var active = carouselEl.querySelector('.carousel-item.active');
+      var imgs = Array.from(carouselEl.querySelectorAll('.carousel-item'));
+      var idx = imgs.indexOf(active);
+      setActiveThumb(idx);
+    });
+
+    // initial active
+    setActiveThumb(0);
+
+    // open lightbox when clicking carousel image
+    carouselEl.querySelectorAll('.carousel-item img').forEach(function(img){
+      img.style.cursor='zoom-in';
+      img.addEventListener('click', function(){
+        var modalEl = document.getElementById('lightboxModal');
+        var modalImg = document.getElementById('lightboxImage');
+        var downloadLink = document.getElementById('lightboxDownload');
+        modalImg.src = this.src;
+        if(downloadLink) downloadLink.href = this.src;
+        var modal = new bootstrap.Modal(modalEl);
+        modal.show();
+      });
+    });
+  }
+
+  // click thumbnail also opens lightbox at that index
+  document.querySelectorAll('.thumb-link').forEach(function(a){
+    a.addEventListener('click', function(e){
+      var idx = this.querySelector('.thumb-img').getAttribute('data-index');
+      // small delay to allow carousel to change
+      setTimeout(function(){
+        var activeImg = document.querySelector('#albumCarousel .carousel-item.active img');
+        if(activeImg){
+          var modalEl = document.getElementById('lightboxModal');
+          var modalImg = document.getElementById('lightboxImage');
+          var downloadLink = document.getElementById('lightboxDownload');
+          modalImg.src = activeImg.src;
+          if(downloadLink) downloadLink.href = activeImg.src;
+          var modal = new bootstrap.Modal(modalEl);
+          modal.show();
+        }
+      }, 200);
+    });
+  });
+
+});
+</script>
+<style>
+.thumb-active{outline:3px solid #0A3D62; border-radius:6px;}
+</style>
+{% endblock %}

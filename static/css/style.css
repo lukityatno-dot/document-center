@@ -398,6 +398,17 @@ footer{
 
 @media (max-width:768px){
 
+}
+
+/* Instagram-like gallery styles */
+.ig-card{cursor:pointer}
+.ig-thumb{width:100%; padding-top:100%; background-size:cover; background-position:center; background-repeat:no-repeat}
+.ig-card .card-body{height:80px}
+
+/* Carousel thumbnails */
+.carousel .img-fluid{object-fit:cover}
+
+
     .table{
 
         font-size:14px;

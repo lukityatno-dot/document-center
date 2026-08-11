@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2>Edit Kategori Dokumen</h2>
+
+  {% if error %}
+    <div class="alert alert-danger">{{ error }}</div>
+  {% endif %}
+
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+      <label class="form-label">Filename</label>
+      <input class="form-control" value="{{ doc.filename }}" readonly>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Kategori</label>
+      <input class="form-control" name="category" value="{{ doc.category or '' }}" placeholder="Contoh: SOP, HR, Keuangan">
+      <div class="form-text">Biarkan kosong untuk menghapus kategori.</div>
+    </div>
+
+    <button class="btn btn-primary" type="submit">Simpan</button>
+    <a class="btn btn-secondary" href="{{ url_for('admin') }}">Batal</a>
+  </form>
+</div>
+{% endblock %}

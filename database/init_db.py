@@ -49,6 +49,10 @@ CREATE TABLE IF NOT EXISTS documents(
     
     thumbnail TEXT,
 
+    checksum TEXT,
+
+    category TEXT,
+
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 
 )

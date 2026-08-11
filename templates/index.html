@@ -172,21 +172,51 @@ Document Center
 
                 </div>
 
-                <div class="input-group">
+                <form method="GET" action="{{ url_for('documents') }}" class="row g-2">
+                    <div class="col-md-6">
+                        <div class="input-group">
 
-                    <span class="input-group-text">
+                            <span class="input-group-text">
 
-                        <i class="bi bi-search"></i>
+                                <i class="bi bi-search"></i>
 
-                    </span>
+                            </span>
 
-                    <input
-                        type="text"
-                        id="search"
-                        class="form-control"
-                        placeholder="Cari dokumen...">
+                            <input
+                                type="text"
+                                id="search"
+                                name="q"
+                                class="form-control"
+                                placeholder="Cari dokumen..."
+                                value="{{ query or '' }}">
 
-                </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-select" name="type">
+                            <option value="">Semua Tipe</option>
+                            {% for tipe in types %}
+                            <option value="{{ tipe }}" {% if tipe == filter_type %}selected{% endif %}>{{ tipe }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-select" name="category">
+                            <option value="">Semua Kategori</option>
+                            {% for category in categories %}
+                            <option value="{{ category }}" {% if category == filter_category %}selected{% endif %}>{{ category }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-select" name="sort">
+                            <option value="name_asc" {% if sort_by == 'name_asc' %}selected{% endif %}>Nama A-Z</option>
+                            <option value="name_desc" {% if sort_by == 'name_desc' %}selected{% endif %}>Nama Z-A</option>
+                            <option value="date_desc" {% if sort_by == 'date_desc' %}selected{% endif %}>Terbaru</option>
+                            <option value="date_asc" {% if sort_by == 'date_asc' %}selected{% endif %}>Terlama</option>
+                        </select>
+                    </div>
+                </form>
 
             </div>
 
@@ -201,6 +231,12 @@ Document Center
 
     <div class="table-responsive">
 
+        {% if query %}
+        <div class="p-3 bg-light border-bottom">
+            <strong>{{ files|length }}</strong> hasil ditemukan untuk "{{ query }}"
+        </div>
+        {% endif %}
+
         <form method="POST" action="{{ url_for('delete_bulk') }}" id="bulk-delete-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <table class="table table-hover align-middle mb-0" id="tabelFile">
@@ -213,6 +249,7 @@ Document Center
                         </th>
                         <th>Nama Dokumen</th>
                         <th>Tipe</th>
+                        <th>Kategori</th>
                         <th>Ukuran</th>
                         <th>Update</th>
                         <th width="140">Aksi</th>
@@ -252,6 +289,12 @@ Document Center
                         {{ file.tipe }}
 
                     </span>
+
+                </td>
+
+                <td>
+
+                    {{ file.category or '-' }}
 
                 </td>
 
