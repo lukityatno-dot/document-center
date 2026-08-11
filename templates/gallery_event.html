@@ -146,50 +146,48 @@
 // drag & drop reorder for thumbnails (managers/admins only)
 document.addEventListener('DOMContentLoaded', function(){
   const role = '{{ user.role if user and user.role else '' }}';
-  if(!['Manager','Administrator'].includes(role)) return;
-
   const container = document.querySelector('.row.row-cols-4');
-  if(!container) return;
-
-  let dragEl = null;
-  container.querySelectorAll('[draggable="true"]').forEach(function(el){
-    el.addEventListener('dragstart', function(e){
-      dragEl = el;
-      e.dataTransfer.effectAllowed = 'move';
-      el.classList.add('dragging');
+  if(['Manager','Administrator'].includes(role) && container){
+    let dragEl = null;
+    container.querySelectorAll('[draggable="true"]').forEach(function(el){
+      el.addEventListener('dragstart', function(e){
+        dragEl = el;
+        e.dataTransfer.effectAllowed = 'move';
+        el.classList.add('dragging');
+      });
+      el.addEventListener('dragend', function(){
+        el.classList.remove('dragging');
+        dragEl = null;
+      });
+      el.addEventListener('dragover', function(e){
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+      });
+      el.addEventListener('drop', function(e){
+        e.preventDefault();
+        if(!dragEl || dragEl === el) return;
+        // swap positions in DOM: insert dragEl before this element
+        const parent = el.parentNode;
+        parent.insertBefore(dragEl, el);
+        // send new order to server
+        const ids = Array.from(container.querySelectorAll('[data-photo-id]')).map(x=>parseInt(x.getAttribute('data-photo-id')));
+        fetch('{{ url_for("gallery_event_reorder", event_id=event.id) }}', {
+          method: 'POST',
+          headers: {
+            'Content-Type':'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+          },
+          body: JSON.stringify({order: ids})
+        }).then(r=>r.json()).then(j=>{
+          if(j.ok){
+            // optionally show toast
+          } else {
+            alert('Gagal menyimpan urutan: '+(j.error||'unknown'))
+          }
+        }).catch(err=>{alert('Network error')});
+      });
     });
-    el.addEventListener('dragend', function(){
-      el.classList.remove('dragging');
-      dragEl = null;
-    });
-    el.addEventListener('dragover', function(e){
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-    });
-    el.addEventListener('drop', function(e){
-      e.preventDefault();
-      if(!dragEl || dragEl === el) return;
-      // swap positions in DOM: insert dragEl before this element
-      const parent = el.parentNode;
-      parent.insertBefore(dragEl, el);
-      // send new order to server
-      const ids = Array.from(container.querySelectorAll('[data-photo-id]')).map(x=>parseInt(x.getAttribute('data-photo-id')));
-      fetch('{{ url_for("gallery_event_reorder", event_id=event.id) }}', {
-        method: 'POST',
-        headers: {
-          'Content-Type':'application/json',
-          'X-CSRFToken': '{{ csrf_token() }}'
-        },
-        body: JSON.stringify({order: ids})
-      }).then(r=>r.json()).then(j=>{
-        if(j.ok){
-          // optionally show toast
-        } else {
-          alert('Gagal menyimpan urutan: '+(j.error||'unknown'))
-        }
-      }).catch(err=>{alert('Network error')});
-    });
-  });
+  }
 
   // carousel + lightbox + thumbnail active styling
   var carouselEl = document.getElementById('albumCarousel');
